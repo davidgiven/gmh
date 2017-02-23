@@ -9,8 +9,6 @@ package com.cowlark.gmh
 
 import org.sqlite.JDBC
 import org.sqlite.SQLiteConfig
-import java.nio.file.Files
-import java.nio.file.Paths
 import java.sql.Connection
 
 class Dummy {}
@@ -43,3 +41,4 @@ fun connect_to_database(): Connection
 
     return connection
 }
+
