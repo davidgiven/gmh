@@ -13,6 +13,7 @@ class Progressbar(val message: String, val max: Int): Closeable {
     var lastUpdate = 0L
 
     override fun close() {
+        lastUpdate = 0L
         show(max)
         clear()
     }
