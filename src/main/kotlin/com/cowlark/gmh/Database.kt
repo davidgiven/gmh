@@ -29,29 +29,33 @@ fun connect_to_database(filename: String): Connection {
     statement.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             msgId INTEGER PRIMARY KEY,
-            thrId INTEGER,
-            value TEXT
+            modificationTime INTEGER,
+            flags TEXT,
+            value BLOB
         )
     """)
     statement.execute("""
-        CREATE TABLE IF NOT EXISTS flags (
+        CREATE TABLE IF NOT EXISTS labels (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )
     """)
     statement.execute("""
-        CREATE INDEX IF NOT EXISTS flags_by_name ON flags (name)
+        CREATE INDEX IF NOT EXISTS labels_by_name ON labels (name)
     """)
     statement.execute("""
-        CREATE TABLE IF NOT EXISTS flagMap (
+        CREATE TABLE IF NOT EXISTS labelMap (
             msgId INTEGER,
-            flagId INTEGER,
+            labelId INTEGER,
             FOREIGN KEY (msgId) REFERENCES messages(msgId) ON DELETE CASCADE,
-            FOREIGN KEY (flagId) REFERENCES flags(id) ON DELETE CASCADE
+            FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
         )
     """)
     statement.execute("""
-        CREATE INDEX IF NOT EXISTS flagMap_by_msg ON flagMap (msgId)
+        CREATE INDEX IF NOT EXISTS labelMap_by_msg ON labelMap (msgId)
+    """)
+    statement.execute("""
+        CREATE INDEX IF NOT EXISTS labelMap_by_label ON labelMap (labelId)
     """)
     connection.commit()
 
@@ -68,23 +72,36 @@ class Database constructor(filename: String) {
     val setVarStatement = connection.prepareStatement(
             "INSERT OR REPLACE INTO variables (name, value) VALUES (?, ?)"
     )
-    
+
     val insertSkeletonStatement = connection.prepareStatement(
-            "INSERT OR IGNORE INTO messages (msgId) VALUES (?)"
+            "INSERT OR IGNORE INTO messages (msgId, flags) VALUES (?, ?)"
     )
 
-    val insertFlagStatement = connection.prepareStatement(
-            "INSERT OR IGNORE INTO flags (name) VALUES (?)"
+    val setModificationTimeStatement = connection.prepareStatement(
+            "UPDATE messages SET modificationTime = ? WHERE msgId = ?"
     )
 
-    val clearFlagMappingStatement = connection.prepareStatement(
-            "DELETE FROM flagMap WHERE msgId = ?"
+    val addLabelStatement = connection.prepareStatement(
+            "INSERT OR IGNORE INTO labels (name) VALUES (?)"
+    )
+
+    val clearMessageLabelsStatement = connection.prepareStatement(
+            "DELETE FROM labelMap WHERE msgId = ?"
     )
     
-    val addFlagMappingStatement = connection.prepareStatement(
-            "INSERT INTO flagMap (msgId, flagId) VALUES (" +
-                    "?, (SELECT id FROM flags WHERE name = ?))"
+    val addMessageLabelStatement = connection.prepareStatement(
+            "INSERT INTO labelMap (msgId, labelId) VALUES (" +
+                    "?, (SELECT id FROM labels WHERE name = ?))"
 
+    )
+
+    val getMessagesWithNoBodyStatement = connection.prepareStatement(
+            "SELECT msgId FROM messages WHERE value is null " +
+                    "ORDER BY modificationTime DESC"
+    )
+
+    val setMessageBodyStatement = connection.prepareStatement(
+            "UPDATE messages SET value = ? WHERE msgId = ?"
     )
 
     fun commit() {
@@ -116,28 +133,51 @@ class Database constructor(filename: String) {
 
     fun addSkeleton(skeleton: MessageSkeleton) {
         insertSkeletonStatement.setLong(1, skeleton.messageId)
+        insertSkeletonStatement.setString(2, skeleton.flags)
         insertSkeletonStatement.execute()
 
-        clearFlagMapping(skeleton.messageId)
-        skeleton.flags.map {
-            addFlag(it)
-            addFlagMapping(skeleton.messageId, it)
+        setModificationTimeStatement.setLong(1, skeleton.lastModified)
+        setModificationTimeStatement.setLong(2, skeleton.messageId)
+        setModificationTimeStatement.execute()
+
+        clearMessageLabels(skeleton.messageId)
+        skeleton.labels.map {
+            addLabel(it)
+            addMessageLabel(skeleton.messageId, it)
         }
     }
 
-    fun addFlag(flag: String) {
-        insertFlagStatement.setString(1, flag)
-        insertFlagStatement.execute()
+    fun addLabel(flag: String) {
+        addLabelStatement.setString(1, flag)
+        addLabelStatement.execute()
     }
 
-    fun clearFlagMapping(msgId: Long) {
-        clearFlagMappingStatement.setLong(1, msgId)
-        clearFlagMappingStatement.execute()
+    fun clearMessageLabels(msgId: Long) {
+        clearMessageLabelsStatement.setLong(1, msgId)
+        clearMessageLabelsStatement.execute()
     }
 
-    fun addFlagMapping(msgId: Long, flag: String) {
-        addFlagMappingStatement.setLong(1, msgId)
-        addFlagMappingStatement.setString(2, flag)
-        addFlagMappingStatement.execute()
+    fun addMessageLabel(msgId: Long, flag: String) {
+        addMessageLabelStatement.setLong(1, msgId)
+        addMessageLabelStatement.setString(2, flag)
+        addMessageLabelStatement.execute()
+    }
+
+    fun getMessagesWithNoBody(): Collection<Long> {
+        val responses = getMessagesWithNoBodyStatement.executeQuery()
+        try {
+            val result = mutableListOf<Long>()
+            while (responses.next())
+                result.add(responses.getLong(1))
+            return result
+        } finally {
+            responses.close()
+        }
+    }
+
+    fun setMessageBody(msgId: Long, value: String) {
+        setMessageBodyStatement.setString(1, value)
+        setMessageBodyStatement.setLong(2, msgId)
+        setMessageBodyStatement.execute()
     }
 }

@@ -8,15 +8,20 @@
 package com.cowlark.gmh
 
 import com.sun.mail.gimap.GmailFolder
+import com.sun.mail.gimap.GmailMsgIdTerm
 import com.sun.mail.gimap.GmailStore
 import com.sun.mail.iap.Argument
 import com.sun.mail.imap.protocol.FLAGS
 import com.sun.mail.imap.protocol.FetchResponse
+import com.sun.mail.imap.protocol.MODSEQ
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import javax.mail.Flags
 import javax.mail.Folder
 import javax.mail.Session
 
 val SQUARE_BRACKET: Byte = '['.toByte()
+val FETCH_BATCH_SIZE = 10
 
 fun fatal(message: String) {
     System.err.printf("error: %s\n", message)
@@ -43,34 +48,30 @@ fun connect_to_imap(username: String, password: String): GmailFolder {
 }
 
 class MessageSkeleton(response: FetchResponse) {
-    var flags = mutableSetOf<String>()
-    var messageId = 0L;
+    var labels = mutableSetOf<String>()
+    var messageId = 0L
+    var flags = ""
+    var lastModified = 0L
 
     init {
         response.extensionItems.map {
             when (it.key) {
                 "X-GM-MSGID" -> messageId = it.value as Long
+                "X-GM-LABELS" -> labels.addAll(it.value as Array<String>)
+                else -> {}
             }
         }
 
+        lastModified = (response.getItem(MODSEQ::class.java) as MODSEQ).modseq
+
         val flagsObject = response.getItem(FLAGS::class.java)
-        if (flagsObject.contains(Flags.Flag.ANSWERED))
-            flags.add("ANSWERED")
+
         if (flagsObject.contains(Flags.Flag.DELETED))
-            flags.add("DELETED")
-        if (flagsObject.contains(Flags.Flag.DRAFT))
-            flags.add("DRAFT")
-        if (flagsObject.contains(Flags.Flag.FLAGGED))
-            flags.add("FLAGGED")
-        if (flagsObject.contains(Flags.Flag.RECENT))
-            flags.add("RECENT")
-        if (flagsObject.contains(Flags.Flag.SEEN))
-            flags.add("SEEN")
-        if (flagsObject.contains(Flags.Flag.USER))
-            flags.add("USER")
-        flagsObject.userFlags.map {
-            flags.add(it)
-        }
+            flags += "D"
+        if (!flagsObject.contains(Flags.Flag.SEEN))
+            flags += "U"
+        if (flagsObject.contains(Flags.Flag.ANSWERED))
+            flags += "R"
     }
 }
 
@@ -92,6 +93,7 @@ fun main(args: Array<String>) {
                         .writeArgument(
                                 Argument()
                                         .writeAtom("X-GM-MSGID")
+                                        .writeAtom("X-GM-LABELS")
                                         .writeAtom("FLAGS")
                         )
                         .writeArgument(
@@ -104,6 +106,7 @@ fun main(args: Array<String>) {
         Progressbar("Thinking", responses.size).use {
             progress ->
             for (i in 0..(responses.size - 1)) {
+                progress.show(i)
                 var response = responses[i]
                 if (response.isOK) {
                     response.skipSpaces()
@@ -117,11 +120,29 @@ fun main(args: Array<String>) {
                 else if (response is FetchResponse) {
                     db.addSkeleton(MessageSkeleton(response))
                 }
-                progress.show(i)
             }
         }
     }
 
     db.set("modseq", highestModSeq.toString())
     db.commit()
+
+    log("fetching message bodies")
+    val pendingBodies = db.getMessagesWithNoBody()
+    Progressbar("Downloading", pendingBodies.size).use {
+        progress ->
+        var count = 0;
+        pendingBodies.map {
+            progress.show(count)
+            val messages = folder.search(GmailMsgIdTerm(it))
+            if (messages.size == 1) {
+                val message = messages.get(0)
+                val body = ByteArrayOutputStream()
+                message.writeTo(body)
+                db.setMessageBody(it, String(body.toByteArray(), StandardCharsets.ISO_8859_1))
+                db.commit()
+            }
+            count++
+        }
+    }
 }
