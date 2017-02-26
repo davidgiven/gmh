@@ -19,7 +19,7 @@ import javax.mail.Folder
 import javax.mail.Session
 
 val SQUARE_BRACKET: Byte = '['.toByte()
-val FETCH_BATCH_SIZE = 50
+val FETCH_BATCH_SIZE = 500
 
 fun fatal(message: String) {
   System.err.printf("error: %s\n", message)
