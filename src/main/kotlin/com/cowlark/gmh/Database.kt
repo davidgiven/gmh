@@ -7,9 +7,20 @@
 
 package com.cowlark.gmh
 
+import com.sun.mail.imap.protocol.ENVELOPE
 import org.sqlite.JDBC
 import org.sqlite.SQLiteConfig
 import java.sql.Connection
+import javax.mail.internet.InternetAddress
+
+enum class AddressKind {
+  FROM,
+  TO,
+  CC,
+  BCC,
+  REPLYTO,
+  SENDER
+}
 
 fun connect_to_database(filename: String): Connection {
   val config = SQLiteConfig()
@@ -29,9 +40,13 @@ fun connect_to_database(filename: String): Connection {
   statement.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             msgId INTEGER PRIMARY KEY,
+            threadId INTEGER,
             uid INTEGER,
             flags TEXT,
-            value BLOB
+            value BLOB,
+            date INTEGER,
+            subject TEXT,
+            messageId TEXT
         )
     """)
   statement.execute("""
@@ -60,6 +75,26 @@ fun connect_to_database(filename: String): Connection {
   statement.execute("""
         CREATE INDEX IF NOT EXISTS labelMap_by_label ON labelMap (labelId)
     """)
+  statement.execute("""
+        CREATE TABLE IF NOT EXISTS addresses (
+            id INTEGER PRIMARY KEY,
+            email TEXT UNIQUE,
+            name TEXT
+        )
+    """)
+  statement.execute("""
+        CREATE INDEX IF NOT EXISTS addresses_by_email ON addresses (email)
+    """)
+  statement.execute("""
+        CREATE TABLE IF NOT EXISTS addressMap (
+            msgId INTEGER,
+            addressId INTEGER,
+            kind INTEGER,
+            FOREIGN KEY (msgId) REFERENCES messages(msgId) ON DELETE CASCADE,
+            FOREIGN KEY (addressId) REFERENCES addresses(id) ON DELETE CASCADE
+        )
+    """)
+
   connection.commit()
 
   return connection
@@ -84,6 +119,10 @@ class Database constructor(filename: String) {
       "UPDATE messages SET uid = ? WHERE msgId = ?"
   )
 
+  val setMessageThreadIdStatement = connection.prepareStatement(
+      "UPDATE messages SET threadId = ? WHERE msgId = ?"
+  )
+
   val setMessageFlagsStatement = connection.prepareStatement(
       "UPDATE messages SET flags = ? WHERE msgId = ?"
   )
@@ -99,7 +138,6 @@ class Database constructor(filename: String) {
   val addMessageLabelStatement = connection.prepareStatement(
       "INSERT INTO labelMap (msgId, labelId) VALUES (" +
           "?, (SELECT id FROM labels WHERE name = ?))"
-
   )
 
   val getUidsWithNoBodyStatement = connection.prepareStatement(
@@ -108,7 +146,18 @@ class Database constructor(filename: String) {
   )
 
   val setMessageValueStatement = connection.prepareStatement(
-      "UPDATE messages SET value = ? WHERE msgId = ?"
+      "UPDATE messages SET " +
+          "value = ?, date = ?, subject = ?, messageId = ? " +
+          "WHERE msgId = ?"
+  )
+
+  val addAddressStatement = connection.prepareStatement(
+      "INSERT OR IGNORE INTO addresses (email, name) VALUES (?, ?)"
+  )
+
+  val addMessageAddressStatement = connection.prepareStatement(
+      "INSERT INTO addressMap (msgId, addressId, kind) VALUES (" +
+          "?, (SELECT id FROM addresses WHERE email = ?), ?)"
   )
 
   fun commit() {
@@ -149,6 +198,12 @@ class Database constructor(filename: String) {
     setMessageUidStatement.execute()
   }
 
+  fun setMessageThreadId(msgId: Long, threadId: Long) {
+    setMessageThreadIdStatement.setLong(1, threadId)
+    setMessageThreadIdStatement.setLong(2, msgId)
+    setMessageThreadIdStatement.execute()
+  }
+
   fun setMessageFlags(msgId: Long, flags: String) {
     setMessageFlagsStatement.setString(1, flags)
     setMessageFlagsStatement.setLong(2, msgId)
@@ -179,6 +234,9 @@ class Database constructor(filename: String) {
     addMessageLabelStatement.execute()
   }
 
+  fun addAddress(email: String, name: String?) {
+  }
+
   fun getUidsWithNoBody(): List<Long> {
     val responses = getUidsWithNoBodyStatement.executeQuery()
     try {
@@ -192,9 +250,36 @@ class Database constructor(filename: String) {
     }
   }
 
-  fun setMessageValue(msgId: Long, value: String) {
+  fun setMessageValue(msgId: Long, value: String, envelope: ENVELOPE) {
     setMessageValueStatement.setString(1, value)
-    setMessageValueStatement.setLong(2, msgId)
+    setMessageValueStatement.setLong(2, envelope.date?.time ?: 0L)
+    setMessageValueStatement.setString(3, envelope.subject)
+    setMessageValueStatement.setString(4, envelope.messageId)
+    setMessageValueStatement.setLong(5, msgId)
     setMessageValueStatement.execute()
+
+    fun add(address: InternetAddress, kind: AddressKind) {
+      addAddressStatement.setString(1, address.address)
+      addAddressStatement.setString(2, address.personal)
+      addAddressStatement.execute()
+
+      addMessageAddressStatement.setLong(1, msgId)
+      addMessageAddressStatement.setString(2, address.address)
+      addMessageAddressStatement.setInt(3, kind.ordinal)
+      addMessageAddressStatement.execute()
+    }
+
+    if (envelope.bcc != null)
+      envelope.bcc.map { add(it, AddressKind.BCC) }
+    if (envelope.cc != null)
+      envelope.cc.map { add(it, AddressKind.CC) }
+    if (envelope.from != null)
+      envelope.from.map { add(it, AddressKind.FROM) }
+    if (envelope.to != null)
+      envelope.to.map { add(it, AddressKind.TO) }
+    if (envelope.replyTo != null)
+      envelope.replyTo.map { add(it, AddressKind.REPLYTO) }
+    if (envelope.sender != null)
+      envelope.sender.map { add(it, AddressKind.SENDER) }
   }
 }

@@ -11,10 +11,7 @@ import com.sun.mail.gimap.GmailFolder
 import com.sun.mail.gimap.GmailStore
 import com.sun.mail.iap.Argument
 import com.sun.mail.iap.Response
-import com.sun.mail.imap.protocol.BODY
-import com.sun.mail.imap.protocol.FLAGS
-import com.sun.mail.imap.protocol.FetchResponse
-import com.sun.mail.imap.protocol.UID
+import com.sun.mail.imap.protocol.*
 import org.sqlite.util.StringUtils
 import java.nio.charset.StandardCharsets
 import javax.mail.Flags
@@ -52,14 +49,17 @@ class MessageSkeleton(response: FetchResponse) {
   var labels: Set<String>? = null
   var uid = 0L
   var messageId = 0L
+  var threadId = 0L
   var flags: String? = null
   var value: String? = null
+  var envelope: ENVELOPE? = null
 
   init {
     if (response.extensionItems != null) {
       response.extensionItems.map {
         when (it.key) {
           "X-GM-MSGID"  -> messageId = it.value as Long
+          "X-GM-THRID"  -> threadId = it.value as Long
           "X-GM-LABELS" -> labels = (it.value as Array<String>).toSet()
           else          -> {
           }
@@ -91,6 +91,8 @@ class MessageSkeleton(response: FetchResponse) {
       value = value!!.substring(value!!.indexOf('\n') + 1)
     }
 
+    envelope = response.getItem(ENVELOPE::class.java)
+
     if (messageId == 0L)
       log(String.format("message with UID %d has no message ID. This is weird.", uid));
   }
@@ -98,6 +100,8 @@ class MessageSkeleton(response: FetchResponse) {
   fun set(db: Database) {
     assert(messageId != 0L)
     db.addMessage(messageId)
+    if (threadId != 0L)
+      db.setMessageThreadId(messageId, threadId)
     if (uid != 0L)
       db.setMessageUid(messageId, uid)
     if (flags != null)
@@ -105,7 +109,7 @@ class MessageSkeleton(response: FetchResponse) {
     if (labels != null)
       db.setMessageLabels(messageId, labels!!)
     if (value != null)
-      db.setMessageValue(messageId, value!!)
+      db.setMessageValue(messageId, value!!, envelope!!)
   }
 }
 
@@ -217,6 +221,8 @@ fun main(args: Array<String>) {
                     .writeArgument(
                         Argument()
                             .writeAtom("X-GM-MSGID")
+                            .writeAtom("X-GM-THRID")
+                            .writeAtom("ENVELOPE")
                             .writeAtom("BODY.PEEK[]")
                     
                     )
