@@ -56,10 +56,11 @@ class Progressbar(val message: String, val max: Int) : Closeable {
         sb.append(PROGRESS_BAR_CHARS[0].repeat(numempty))
       }
 
-      val persec = progress . toDouble () / (now - startTime).toDouble() * 1000.0
+      val persec = progress.toDouble () / (now - startTime).toDouble() * 1000.0
+      val timeSoFar = (now - startTime).toDouble() / 1000.0
       val estimatedTotal = max.toDouble() / persec
 
-      sb.append(" $progress/$max; " + persec.toInt() + "/sec, " + asTime(estimatedTotal) + " left")
+      sb.append(" $progress/$max; " + persec.toInt() + "/sec, " + asTime(estimatedTotal - timeSoFar) + " left")
       System.err.print(sb.toString())
       System.err.flush()
       lastUpdate = now
