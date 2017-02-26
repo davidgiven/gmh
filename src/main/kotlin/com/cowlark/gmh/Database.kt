@@ -141,7 +141,7 @@ class Database constructor(filename: String) {
   )
 
   val getUidsWithNoBodyStatement = connection.prepareStatement(
-      "SELECT uid FROM messages WHERE value is null " +
+      "SELECT uid FROM messages WHERE value IS NULL AND uid IS NOT NULL " +
           "ORDER BY uid DESC"
   )
 

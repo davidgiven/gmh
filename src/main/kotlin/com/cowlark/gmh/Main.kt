@@ -132,9 +132,12 @@ fun main(args: Array<String>) {
             newModSeq = response.readLong()
         }
       }
-    }
-    else if (response is FetchResponse) {
+    } else if (response.isBAD) {
+      fatal("IMAP server returned error: " + response)
+    } else if (response is FetchResponse) {
       MessageSkeleton(response).set(db)
+    } else {
+      log("unhandled response " + response)
     }
   }
 
@@ -213,11 +216,12 @@ fun main(args: Array<String>) {
         progress.show(count)
         count += uids.size
 
+        val uidlist = StringUtils.join(uids.map(Long::toString), ",")
         process_responses(
             p.command("UID",
                 Argument()
                     .writeAtom("FETCH")
-                    .writeAtom(StringUtils.join(uids.map(Long::toString), ","))
+                    .writeAtom(uidlist)
                     .writeArgument(
                         Argument()
                             .writeAtom("X-GM-MSGID")
