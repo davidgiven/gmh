@@ -5,7 +5,7 @@
  * project root for the full text.
  */
 
-package com.cowlark.gmh
+package com.cowlark.gmh.lib
 
 import com.sun.mail.imap.protocol.ENVELOPE
 import org.sqlite.JDBC
@@ -232,9 +232,6 @@ class Database constructor(filename: String) {
     addMessageLabelStatement.setLong(1, gmailId)
     addMessageLabelStatement.setString(2, flag)
     addMessageLabelStatement.execute()
-  }
-
-  fun addAddress(email: String, name: String?) {
   }
 
   fun getUidsWithNoBody(): List<Long> {

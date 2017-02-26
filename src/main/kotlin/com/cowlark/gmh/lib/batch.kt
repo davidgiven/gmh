@@ -5,7 +5,7 @@
  * project root for the full text.
  */
 
-package com.cowlark.gmh
+package com.cowlark.gmh.lib
 
 fun <T> Sequence<T>.batch(n: Int): Sequence<List<T>> {
   return BatchingSequence(this, n)

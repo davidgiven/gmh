@@ -7,6 +7,9 @@
 
 package com.cowlark.gmh
 
+import com.cowlark.gmh.lib.Database
+import com.cowlark.gmh.lib.Progressbar
+import com.cowlark.gmh.lib.batch
 import com.sun.mail.gimap.GmailFolder
 import com.sun.mail.gimap.GmailStore
 import com.sun.mail.iap.Argument

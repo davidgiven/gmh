@@ -5,7 +5,7 @@
  * project root for the full text.
  */
 
-package com.cowlark.gmh
+package com.cowlark.gmh.lib
 
 import java.io.Closeable
 
@@ -39,7 +39,7 @@ class Progressbar(val message: String, val max: Int) : Closeable {
       val sb = StringBuilder()
 
       sb.append("\r")
-      sb.append(" ".repeat(WIDTH-1))
+      sb.append(" ".repeat(WIDTH -1))
       sb.append("\r")
 
       if (progress == max)
