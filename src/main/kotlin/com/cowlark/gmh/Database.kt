@@ -39,7 +39,7 @@ fun connect_to_database(filename: String): Connection {
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS messages (
-            msgId INTEGER PRIMARY KEY,
+            gmailId INTEGER PRIMARY KEY,
             threadId INTEGER,
             uid INTEGER,
             flags TEXT,
@@ -63,14 +63,14 @@ fun connect_to_database(filename: String): Connection {
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS labelMap (
-            msgId INTEGER,
+            gmailId INTEGER,
             labelId INTEGER,
-            FOREIGN KEY (msgId) REFERENCES messages(msgId) ON DELETE CASCADE,
+            FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE,
             FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
         )
     """)
   statement.execute("""
-        CREATE INDEX IF NOT EXISTS labelMap_by_msg ON labelMap (msgId)
+        CREATE INDEX IF NOT EXISTS labelMap_by_msg ON labelMap (gmailId)
     """)
   statement.execute("""
         CREATE INDEX IF NOT EXISTS labelMap_by_label ON labelMap (labelId)
@@ -87,10 +87,10 @@ fun connect_to_database(filename: String): Connection {
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS addressMap (
-            msgId INTEGER,
+            gmailId INTEGER,
             addressId INTEGER,
             kind INTEGER,
-            FOREIGN KEY (msgId) REFERENCES messages(msgId) ON DELETE CASCADE,
+            FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE,
             FOREIGN KEY (addressId) REFERENCES addresses(id) ON DELETE CASCADE
         )
     """)
@@ -112,19 +112,19 @@ class Database constructor(filename: String) {
   )
 
   val addMessageStatement = connection.prepareStatement(
-      "INSERT OR IGNORE INTO messages (msgId) VALUES (?)"
+      "INSERT OR IGNORE INTO messages (gmailId) VALUES (?)"
   )
 
   val setMessageUidStatement = connection.prepareStatement(
-      "UPDATE messages SET uid = ? WHERE msgId = ?"
+      "UPDATE messages SET uid = ? WHERE gmailId = ?"
   )
 
   val setMessageThreadIdStatement = connection.prepareStatement(
-      "UPDATE messages SET threadId = ? WHERE msgId = ?"
+      "UPDATE messages SET threadId = ? WHERE gmailId = ?"
   )
 
   val setMessageFlagsStatement = connection.prepareStatement(
-      "UPDATE messages SET flags = ? WHERE msgId = ?"
+      "UPDATE messages SET flags = ? WHERE gmailId = ?"
   )
 
   val addLabelStatement = connection.prepareStatement(
@@ -132,11 +132,11 @@ class Database constructor(filename: String) {
   )
 
   val clearMessageLabelsStatement = connection.prepareStatement(
-      "DELETE FROM labelMap WHERE msgId = ?"
+      "DELETE FROM labelMap WHERE gmailId = ?"
   )
 
   val addMessageLabelStatement = connection.prepareStatement(
-      "INSERT INTO labelMap (msgId, labelId) VALUES (" +
+      "INSERT INTO labelMap (gmailId, labelId) VALUES (" +
           "?, (SELECT id FROM labels WHERE name = ?))"
   )
 
@@ -148,7 +148,7 @@ class Database constructor(filename: String) {
   val setMessageValueStatement = connection.prepareStatement(
       "UPDATE messages SET " +
           "value = ?, date = ?, subject = ?, messageId = ? " +
-          "WHERE msgId = ?"
+          "WHERE gmailId = ?"
   )
 
   val addAddressStatement = connection.prepareStatement(
@@ -156,7 +156,7 @@ class Database constructor(filename: String) {
   )
 
   val addMessageAddressStatement = connection.prepareStatement(
-      "INSERT INTO addressMap (msgId, addressId, kind) VALUES (" +
+      "INSERT INTO addressMap (gmailId, addressId, kind) VALUES (" +
           "?, (SELECT id FROM addresses WHERE email = ?), ?)"
   )
 
@@ -187,34 +187,34 @@ class Database constructor(filename: String) {
     setVarStatement.execute()
   }
 
-  fun addMessage(msgId: Long) {
-    addMessageStatement.setLong(1, msgId)
+  fun addMessage(gmailId: Long) {
+    addMessageStatement.setLong(1, gmailId)
     addMessageStatement.execute()
   }
 
-  fun setMessageUid(msgId: Long, uid: Long) {
+  fun setMessageUid(gmailId: Long, uid: Long) {
     setMessageUidStatement.setLong(1, uid)
-    setMessageUidStatement.setLong(2, msgId)
+    setMessageUidStatement.setLong(2, gmailId)
     setMessageUidStatement.execute()
   }
 
-  fun setMessageThreadId(msgId: Long, threadId: Long) {
+  fun setMessageThreadId(gmailId: Long, threadId: Long) {
     setMessageThreadIdStatement.setLong(1, threadId)
-    setMessageThreadIdStatement.setLong(2, msgId)
+    setMessageThreadIdStatement.setLong(2, gmailId)
     setMessageThreadIdStatement.execute()
   }
 
-  fun setMessageFlags(msgId: Long, flags: String) {
+  fun setMessageFlags(gmailId: Long, flags: String) {
     setMessageFlagsStatement.setString(1, flags)
-    setMessageFlagsStatement.setLong(2, msgId)
+    setMessageFlagsStatement.setLong(2, gmailId)
     setMessageFlagsStatement.execute()
   }
 
-  fun setMessageLabels(msgId: Long, labels: Set<String>) {
-    clearMessageLabels(msgId)
+  fun setMessageLabels(gmailId: Long, labels: Set<String>) {
+    clearMessageLabels(gmailId)
     labels.map {
       addLabel(it)
-      addMessageLabel(msgId, it)
+      addMessageLabel(gmailId, it)
     }
   }
 
@@ -223,13 +223,13 @@ class Database constructor(filename: String) {
     addLabelStatement.execute()
   }
 
-  fun clearMessageLabels(msgId: Long) {
-    clearMessageLabelsStatement.setLong(1, msgId)
+  fun clearMessageLabels(gmailId: Long) {
+    clearMessageLabelsStatement.setLong(1, gmailId)
     clearMessageLabelsStatement.execute()
   }
 
-  fun addMessageLabel(msgId: Long, flag: String) {
-    addMessageLabelStatement.setLong(1, msgId)
+  fun addMessageLabel(gmailId: Long, flag: String) {
+    addMessageLabelStatement.setLong(1, gmailId)
     addMessageLabelStatement.setString(2, flag)
     addMessageLabelStatement.execute()
   }
@@ -250,12 +250,12 @@ class Database constructor(filename: String) {
     }
   }
 
-  fun setMessageValue(msgId: Long, value: String, envelope: ENVELOPE) {
+  fun setMessageValue(gmailId: Long, value: String, envelope: ENVELOPE) {
     setMessageValueStatement.setString(1, value)
     setMessageValueStatement.setLong(2, envelope.date?.time ?: 0L)
     setMessageValueStatement.setString(3, envelope.subject)
     setMessageValueStatement.setString(4, envelope.messageId)
-    setMessageValueStatement.setLong(5, msgId)
+    setMessageValueStatement.setLong(5, gmailId)
     setMessageValueStatement.execute()
 
     fun add(address: InternetAddress, kind: AddressKind) {
@@ -263,7 +263,7 @@ class Database constructor(filename: String) {
       addAddressStatement.setString(2, address.personal)
       addAddressStatement.execute()
 
-      addMessageAddressStatement.setLong(1, msgId)
+      addMessageAddressStatement.setLong(1, gmailId)
       addMessageAddressStatement.setString(2, address.address)
       addMessageAddressStatement.setInt(3, kind.ordinal)
       addMessageAddressStatement.execute()

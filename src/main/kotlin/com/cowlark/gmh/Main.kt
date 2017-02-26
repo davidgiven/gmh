@@ -19,7 +19,7 @@ import javax.mail.Folder
 import javax.mail.Session
 
 val SQUARE_BRACKET: Byte = '['.toByte()
-val FETCH_BATCH_SIZE = 10
+val FETCH_BATCH_SIZE = 50
 
 fun fatal(message: String) {
   System.err.printf("error: %s\n", message)
@@ -48,7 +48,7 @@ fun connect_to_imap(username: String, password: String): GmailFolder {
 class MessageSkeleton(response: FetchResponse) {
   var labels: Set<String>? = null
   var uid = 0L
-  var messageId = 0L
+  var gmailId = 0L
   var threadId = 0L
   var flags: String? = null
   var value: String? = null
@@ -58,7 +58,7 @@ class MessageSkeleton(response: FetchResponse) {
     if (response.extensionItems != null) {
       response.extensionItems.map {
         when (it.key) {
-          "X-GM-MSGID"  -> messageId = it.value as Long
+          "X-GM-MSGID"  -> gmailId = it.value as Long
           "X-GM-THRID"  -> threadId = it.value as Long
           "X-GM-LABELS" -> labels = (it.value as Array<String>).toSet()
           else          -> {
@@ -93,23 +93,23 @@ class MessageSkeleton(response: FetchResponse) {
 
     envelope = response.getItem(ENVELOPE::class.java)
 
-    if (messageId == 0L)
+    if (gmailId == 0L)
       log(String.format("message with UID %d has no message ID. This is weird.", uid));
   }
 
   fun set(db: Database) {
-    assert(messageId != 0L)
-    db.addMessage(messageId)
+    assert(gmailId != 0L)
+    db.addMessage(gmailId)
     if (threadId != 0L)
-      db.setMessageThreadId(messageId, threadId)
+      db.setMessageThreadId(gmailId, threadId)
     if (uid != 0L)
-      db.setMessageUid(messageId, uid)
+      db.setMessageUid(gmailId, uid)
     if (flags != null)
-      db.setMessageFlags(messageId, flags!!)
+      db.setMessageFlags(gmailId, flags!!)
     if (labels != null)
-      db.setMessageLabels(messageId, labels!!)
+      db.setMessageLabels(gmailId, labels!!)
     if (value != null)
-      db.setMessageValue(messageId, value!!, envelope!!)
+      db.setMessageValue(gmailId, value!!, envelope!!)
   }
 }
 
@@ -208,7 +208,7 @@ fun main(args: Array<String>) {
     Progressbar("Downloading", pendingBodies.size).use {
       progress ->
       var count = 0
-      pendingBodies.asSequence().batch(50).forEach {
+      pendingBodies.asSequence().batch(FETCH_BATCH_SIZE).forEach {
         uids ->
         progress.show(count)
         count += uids.size
