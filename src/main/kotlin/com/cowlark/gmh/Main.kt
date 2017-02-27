@@ -7,13 +7,15 @@
 
 package com.cowlark.gmh
 
+import com.cowlark.gmh.cmd.SelectCommand
 import com.cowlark.gmh.cmd.SyncCommand
+import com.cowlark.gmh.lib.HasOptions
 import com.cowlark.gmh.lib.Option
 import com.cowlark.gmh.lib.fatal
 import com.cowlark.gmh.lib.log
 import com.cowlark.gmh.lib.parseFlags
 
-class GlobalOptions {
+class GlobalOptions : HasOptions() {
   @Option(
       shortName = "-D",
       longName = "--database",
@@ -23,13 +25,17 @@ class GlobalOptions {
 
 fun main(argv: Array<String>) {
   val globalOptions = GlobalOptions()
-  val rest = parseFlags(globalOptions, argv)
-  if (rest.size == 0)
-    fatal("no command given --- try 'help'")
+  parseFlags(globalOptions, argv)
 
-  when (rest[0]) {
-    "sync" -> SyncCommand(globalOptions)
-    "help" -> log("no help yet")
-    else   -> fatal("unexpected parameter '" + rest[0] + "' --- try 'help'")
+  val command = globalOptions.rest.getOrElse(0, {
+    fatal("no command given --- try 'help'")
+  })
+  globalOptions.rest = globalOptions.rest.sliceArray(1 .. globalOptions.rest.size-1)
+
+  when (command) {
+    "sync"   -> SyncCommand(globalOptions)
+    "select" -> SelectCommand(globalOptions)
+    "help"   -> log("no help yet")
+    else     -> fatal("unexpected parameter '$command' --- try 'help'")
   }
 }

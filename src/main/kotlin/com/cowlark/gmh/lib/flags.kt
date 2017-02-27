@@ -17,7 +17,11 @@ annotation class Option(
     val help: String = ""
 )
 
-fun parseFlags(flagsObject: Any, argv: Array<String>): Array<String> {
+open class HasOptions {
+  var rest: Array<String> = arrayOf()
+}
+
+fun parseFlags(flagsObject: HasOptions, argv: Array<String>) {
   val flags = mutableMapOf<String, KMutableProperty<*>>()
 
   flagsObject.javaClass.kotlin.members
@@ -74,5 +78,5 @@ fun parseFlags(flagsObject: Any, argv: Array<String>): Array<String> {
     index++
   }
 
-  return argv.sliceArray(index..argv.size)
+  flagsObject.rest = argv.sliceArray(index .. argv.size-1)
 }

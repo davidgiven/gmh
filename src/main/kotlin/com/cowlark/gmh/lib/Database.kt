@@ -96,6 +96,12 @@ fun connect_to_database(filename: String): Connection {
             FOREIGN KEY (addressId) REFERENCES addresses(id) ON DELETE CASCADE
         )
     """)
+  statement.execute("""
+        CREATE TABLE IF NOT EXISTS selected (
+            gmailId INTEGER,
+            FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE
+        )
+    """)
 
   connection.commit()
 
@@ -103,63 +109,77 @@ fun connect_to_database(filename: String): Connection {
 }
 
 class Database constructor(filename: String) {
-  val connection = connect_to_database(filename)
+  private val connection = connect_to_database(filename)
 
-  val getVarStatement = connection.prepareStatement(
+  private val getVarStatement = connection.prepareStatement(
       "SELECT value FROM variables WHERE (name = ?)"
   )
 
-  val setVarStatement = connection.prepareStatement(
+  private val setVarStatement = connection.prepareStatement(
       "INSERT OR REPLACE INTO variables (name, value) VALUES (?, ?)"
   )
 
-  val addMessageStatement = connection.prepareStatement(
+  private val addMessageStatement = connection.prepareStatement(
       "INSERT OR IGNORE INTO messages (gmailId) VALUES (?)"
   )
 
-  val setMessageUidStatement = connection.prepareStatement(
+  private val setMessageUidStatement = connection.prepareStatement(
       "UPDATE messages SET uid = ? WHERE gmailId = ?"
   )
 
-  val setMessageThreadIdStatement = connection.prepareStatement(
+  private val setMessageThreadIdStatement = connection.prepareStatement(
       "UPDATE messages SET threadId = ? WHERE gmailId = ?"
   )
 
-  val setMessageFlagsStatement = connection.prepareStatement(
+  private val setMessageFlagsStatement = connection.prepareStatement(
       "UPDATE messages SET flags = ? WHERE gmailId = ?"
   )
 
-  val addLabelStatement = connection.prepareStatement(
+  private val addLabelStatement = connection.prepareStatement(
       "INSERT OR IGNORE INTO labels (name) VALUES (?)"
   )
 
-  val clearMessageLabelsStatement = connection.prepareStatement(
+  private val clearMessageLabelsStatement = connection.prepareStatement(
       "DELETE FROM labelMap WHERE gmailId = ?"
   )
 
-  val addMessageLabelStatement = connection.prepareStatement(
+  private val addMessageLabelStatement = connection.prepareStatement(
       "INSERT INTO labelMap (gmailId, labelId) VALUES (" +
           "?, (SELECT id FROM labels WHERE name = ?))"
   )
 
-  val getUidsWithNoBodyStatement = connection.prepareStatement(
+  private val getUidsWithNoBodyStatement = connection.prepareStatement(
       "SELECT uid FROM messages WHERE value IS NULL AND uid IS NOT NULL " +
           "ORDER BY uid DESC"
   )
 
-  val setMessageValueStatement = connection.prepareStatement(
+  private val setMessageValueStatement = connection.prepareStatement(
       "UPDATE messages SET " +
           "value = ?, date = ?, subject = ?, messageId = ? " +
           "WHERE gmailId = ?"
   )
 
-  val addAddressStatement = connection.prepareStatement(
+  private val addAddressStatement = connection.prepareStatement(
       "INSERT OR IGNORE INTO addresses (email, name) VALUES (?, ?)"
   )
 
-  val addMessageAddressStatement = connection.prepareStatement(
+  private val addMessageAddressStatement = connection.prepareStatement(
       "INSERT INTO addressMap (gmailId, addressId, kind) VALUES (" +
           "?, (SELECT id FROM addresses WHERE email = ?), ?)"
+  )
+
+  private val clearSelectionStatement = connection.prepareStatement(
+      "DELETE FROM selected"
+  )
+
+  private val addLabelToSelectionStatement = connection.prepareStatement(
+      "INSERT INTO selected (gmailId) " +
+          "SELECT gmailId FROM labelMap WHERE " +
+          "labelId = (SELECT id FROM labels WHERE name = ?)"
+  )
+
+  private val countSelectionSizeStatement = connection.prepareStatement(
+      "SELECT COUNT(*) FROM selected"
   )
 
   fun commit() {
@@ -280,5 +300,25 @@ class Database constructor(filename: String) {
       envelope.replyTo.map { add(it, AddressKind.REPLYTO) }
     if (envelope.sender != null)
       envelope.sender.map { add(it, AddressKind.SENDER) }
+  }
+
+  fun clearSelection() {
+    clearSelectionStatement.execute()
+  }
+
+  fun addLabelToSelection(label: String) {
+    addLabelToSelectionStatement.setString(1, label)
+    addLabelToSelectionStatement.execute()
+  }
+
+  fun countSelectionSize(): Int {
+    val responses = countSelectionSizeStatement.executeQuery()
+    try {
+      responses.next()
+      return responses.getInt(1)
+    }
+    finally {
+      responses.close()
+    }
   }
 }
