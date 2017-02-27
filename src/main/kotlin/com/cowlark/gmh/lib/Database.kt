@@ -22,6 +22,8 @@ enum class AddressKind {
   SENDER
 }
 
+var database_filename = System.getenv("HOME") + ".gmh.sqlite"
+
 fun connect_to_database(filename: String): Connection {
   val config = SQLiteConfig()
   config.enforceForeignKeys(true)

@@ -7,6 +7,7 @@
 
 package com.cowlark.gmh.cmd
 
+import com.cowlark.gmh.GlobalOptions
 import com.cowlark.gmh.lib.Database
 import com.cowlark.gmh.lib.Progressbar
 import com.cowlark.gmh.lib.batch
@@ -113,9 +114,9 @@ private class MessageSkeleton(response: FetchResponse) {
   }
 }
 
-fun SyncCommand(args: Array<String>) {
+fun SyncCommand(globalOptions: GlobalOptions) {
   log("connecting")
-  val db = Database("gmh.sqlite")
+  val db = Database(globalOptions.databasePath)
   val folder = connect_to_imap("david.given@gmail.com", "fjsqqmpawuvmrxmd")
   folder.open(Folder.READ_ONLY)
 
