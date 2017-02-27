@@ -1,2 +1,2 @@
 #!/bin/sh
-exec java -jar build/libs/gmh.jar "$@"
+exec java -classpath 'build/libs/*' com.cowlark.gmh.MainKt "$@"

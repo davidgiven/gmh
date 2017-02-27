@@ -21,11 +21,6 @@ jar {
 	manifest {
 		attributes 'Main-Class': mainClassName
 	}
-	from {
-		configurations.compile.collect {
-			it.isDirectory() ? it : zipTree(it)
-		}
-	}
 }
 
 repositories {
@@ -35,12 +30,17 @@ repositories {
 dependencies {
 	compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 	compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-	compile group: 'com.sun.mail', name: 'gimap', version: '1.5.6'
-	compile group: 'javax.mail', name: 'javax.mail-api', version: '1.5.6'
-	compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.16.1'
+	compile "com.sun.mail:gimap:1.5.6"
+	compile "org.xerial:sqlite-jdbc:3.16.1"
 }
 
 task wrapper(type: Wrapper) {
 	gradleVersion = "2.7"
 }
 
+task install(type: Copy) {
+	dependsOn jar
+
+	into "build/libs"
+	from configurations.compile
+}
