@@ -39,7 +39,7 @@ class Message(
     val bcc: List<InternetAddress>,
     val replyTo: List<InternetAddress>,
     val sender: List<InternetAddress>,
-    val body: String?
+    val downloaded: Boolean
 ) {}
 
 fun connect_to_database(filename: String): Connection {
@@ -75,6 +75,9 @@ fun connect_to_database(filename: String): Connection {
     """)
   statement.execute("""
         CREATE INDEX IF NOT EXISTS messages_by_downloaded ON messages (downloaded)
+    """)
+  statement.execute("""
+        CREATE INDEX IF NOT EXISTS messages_by_date ON messages (date)
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS labels (
@@ -185,11 +188,6 @@ class Database constructor(filename: String) {
           "?, (SELECT id FROM labels WHERE name = ?))"
   )
 
-  private val getNonDownloadedUidsStatement = connection.prepareStatement(
-      "SELECT uid FROM messages WHERE " +
-          "downloaded = 0 AND uid IS NOT NULL"
-  )
-
   private val setMessageValueStatement = connection.prepareStatement(
       "UPDATE messages SET " +
           "downloaded = 1, value = ?, date = ?, subject = ?, messageId = ? " +
@@ -217,11 +215,6 @@ class Database constructor(filename: String) {
 
   private val countSelectionSizeStatement = connection.prepareStatement(
       "SELECT COUNT(*) FROM selected"
-  )
-
-  private val getMessageEnvelopeStatement = connection.prepareStatement(
-      "SELECT threadId, uid, flags, date, subject FROM messages " +
-          "WHERE gmailId = ?"
   )
 
   private val getSelectionStatement = connection.prepareStatement(
@@ -306,12 +299,18 @@ class Database constructor(filename: String) {
   }
 
   fun getNonDownloadedUids(): List<Long> {
-    getNonDownloadedUidsStatement.executeQuery().use {
+    val statement = prepare(
+        "SELECT uid FROM messages WHERE " +
+            "downloaded = 0 AND uid IS NOT NULL " +
+            "ORDER BY date DESC"
+    )
+
+    statement.executeQuery().use {
       responses ->
       val result = mutableListOf<Long>()
       while (responses.next())
         result.add(responses.getLong(1))
-      return result.sorted()
+      return result
     }
   }
 
@@ -376,8 +375,13 @@ class Database constructor(filename: String) {
   }
 
   fun getMessage(gmailId: Long): Message {
-    getMessageEnvelopeStatement.setLong(1, gmailId)
-    getMessageEnvelopeStatement.executeQuery().use {
+    val getMessageStatement = prepare(
+        "SELECT threadId, uid, flags, date, subject, downloaded FROM messages " +
+            "WHERE gmailId = ?"
+    )
+
+    getMessageStatement.setLong(1, gmailId)
+    getMessageStatement.executeQuery().use {
       responses ->
       if (!responses.next())
         throw RuntimeException("Gmail ID $gmailId does not exist")
@@ -387,6 +391,7 @@ class Database constructor(filename: String) {
       val flags = responses.getString(3)
       val date = Date(responses.getLong(4))
       val subject = responses.getString(5)
+      val downloaded = responses.getBoolean(6)
 
       fun getAddresses(kind: AddressKind): List<InternetAddress> {
         val addressStatement = prepare(
@@ -422,7 +427,7 @@ class Database constructor(filename: String) {
           replyTo = getAddresses(AddressKind.REPLYTO),
           sender = getAddresses(AddressKind.SENDER),
           to = getAddresses(AddressKind.TO),
-          body = null
+          downloaded = downloaded
       )
     }
   }

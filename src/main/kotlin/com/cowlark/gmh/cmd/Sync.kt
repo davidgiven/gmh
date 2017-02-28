@@ -82,6 +82,22 @@ private class MessageSkeleton(response: FetchResponse) {
         flags += "U"
       if (flagsObject.contains(Flags.Flag.ANSWERED))
         flags += "R"
+
+      flagsObject.userFlags.map {
+        when (it) {
+          "Junk"            -> flags += "-"
+          "NonJunk"         -> flags += "+"
+          "\$Forwarded"     -> flags += "F"
+          "\$Phishing"      -> flags += "P"
+          "Old"             -> flags += "O"
+          "\$MDNSent"       -> Unit
+          "receipt-handled" -> Unit
+          "\$label3"        -> Unit
+          else              -> {
+            log("mysterious user flag $it, ignoring")
+          }
+        }
+      }
     }
 
     val bodyObject = response.getItem(BODY::class.java)
@@ -212,14 +228,12 @@ fun SyncCommand(globalOptions: GlobalOptions) {
     Progressbar("Downloading", pendingBodies.size).use {
       progress ->
       var count = 0
+      progress.show(0)
       pendingBodies.asSequence().batch(FETCH_BATCH_SIZE).forEach {
         uids ->
-        progress.show(count)
-        count += uids.size
 
         val uidlist = StringUtils.join(uids.map(Long::toString), ",")
-        process_responses(
-            p.command("UID",
+        p.writeCommand("UID",
                 Argument()
                     .writeAtom("FETCH")
                     .writeAtom(uidlist)
@@ -229,10 +243,20 @@ fun SyncCommand(globalOptions: GlobalOptions) {
                             .writeAtom("X-GM-THRID")
                             .writeAtom("ENVELOPE")
                             .writeAtom("BODY.PEEK[]")
-                    
+
                     )
             )
-        )
+
+        while (true) {
+          val response = p.readResponse()
+          process_response(response)
+          if (response is FetchResponse) {
+            count++
+            progress.show(count)
+          }
+          if (response.isOK)
+            break
+        }
         db.commit()
       }
     }

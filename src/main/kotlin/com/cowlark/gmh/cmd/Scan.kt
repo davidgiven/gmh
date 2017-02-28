@@ -22,10 +22,16 @@ fun ScanCommand(globalOptions: GlobalOptions) {
     val sb = StringBuilder()
     sb.append(message.uid)
     sb.append(":")
-    if (!message.from.isEmpty())
-      sb.append(message.from[0])
+    sb.append(message.flags)
     sb.append(":")
-    sb.append(message.subject)
+    if (message.downloaded) {
+      if (!message.from.isEmpty())
+        sb.append(message.from[0])
+      sb.append(":")
+      sb.append(message.subject)
+    } else {
+      sb.append(" (not downloaded)")
+    }
     System.out.println(sb)
   }
 }
