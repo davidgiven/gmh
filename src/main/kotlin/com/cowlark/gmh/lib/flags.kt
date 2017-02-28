@@ -51,7 +51,7 @@ fun parseFlags(flagsObject: HasOptions, argv: Array<String>) {
 
       when (property!!.returnType.javaType) {
         String::class.java -> {
-          property!!.setter.call(flagsObject, value)
+          property.setter.call(flagsObject, value)
           return 1
         }
 

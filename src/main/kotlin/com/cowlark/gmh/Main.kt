@@ -7,6 +7,7 @@
 
 package com.cowlark.gmh
 
+import com.cowlark.gmh.cmd.ScanCommand
 import com.cowlark.gmh.cmd.SelectCommand
 import com.cowlark.gmh.cmd.SyncCommand
 import com.cowlark.gmh.lib.HasOptions
@@ -35,6 +36,7 @@ fun main(argv: Array<String>) {
   when (command) {
     "sync"   -> SyncCommand(globalOptions)
     "select" -> SelectCommand(globalOptions)
+    "scan"   -> ScanCommand(globalOptions)
     "help"   -> log("no help yet")
     else     -> fatal("unexpected parameter '$command' --- try 'help'")
   }

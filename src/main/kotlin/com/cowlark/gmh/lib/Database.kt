@@ -11,7 +11,11 @@ import com.sun.mail.imap.protocol.ENVELOPE
 import org.sqlite.JDBC
 import org.sqlite.SQLiteConfig
 import java.sql.Connection
+import java.sql.PreparedStatement
+import java.sql.ResultSet
+import java.util.*
 import javax.mail.internet.InternetAddress
+
 
 enum class AddressKind {
   FROM,
@@ -22,7 +26,21 @@ enum class AddressKind {
   SENDER
 }
 
-var database_filename = System.getenv("HOME") + ".gmh.sqlite"
+class Message(
+    val gmailId: Long,
+    val threadId: Long,
+    val uid: Long,
+    val flags: String,
+    val date: Date,
+    val subject: String,
+    val from: List<InternetAddress>,
+    val to: List<InternetAddress>,
+    val cc: List<InternetAddress>,
+    val bcc: List<InternetAddress>,
+    val replyTo: List<InternetAddress>,
+    val sender: List<InternetAddress>,
+    val body: String?
+) {}
 
 fun connect_to_database(filename: String): Connection {
   val config = SQLiteConfig()
@@ -48,11 +66,15 @@ fun connect_to_database(filename: String): Connection {
             value BLOB,
             date INTEGER,
             subject TEXT,
-            messageId TEXT
+            messageId TEXT,
+            downloaded INTEGER DEFAULT 0
         )
     """)
   statement.execute("""
         CREATE INDEX IF NOT EXISTS messages_by_uid ON messages (uid)
+    """)
+  statement.execute("""
+        CREATE INDEX IF NOT EXISTS messages_by_downloaded ON messages (downloaded)
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS labels (
@@ -97,6 +119,12 @@ fun connect_to_database(filename: String): Connection {
         )
     """)
   statement.execute("""
+        CREATE INDEX IF NOT EXISTS addressMap_by_gmailId ON addressMap (gmailId)
+    """)
+  statement.execute("""
+        CREATE INDEX IF NOT EXISTS addressMap_by_addressId ON addressMap (addressId)
+    """)
+  statement.execute("""
         CREATE TABLE IF NOT EXISTS selected (
             gmailId INTEGER,
             FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE
@@ -110,6 +138,15 @@ fun connect_to_database(filename: String): Connection {
 
 class Database constructor(filename: String) {
   private val connection = connect_to_database(filename)
+  private var statementCache = mutableMapOf<String, PreparedStatement>()
+
+  private fun prepare(statement: String): PreparedStatement {
+    return statementCache.getOrElse(statement, {
+      var prepared = connection.prepareStatement(statement)
+      statementCache.put(statement, prepared)
+      return prepared
+    })
+  }
 
   private val getVarStatement = connection.prepareStatement(
       "SELECT value FROM variables WHERE (name = ?)"
@@ -148,14 +185,14 @@ class Database constructor(filename: String) {
           "?, (SELECT id FROM labels WHERE name = ?))"
   )
 
-  private val getUidsWithNoBodyStatement = connection.prepareStatement(
-      "SELECT uid FROM messages WHERE value IS NULL AND uid IS NOT NULL " +
-          "ORDER BY uid DESC"
+  private val getNonDownloadedUidsStatement = connection.prepareStatement(
+      "SELECT uid FROM messages WHERE " +
+          "downloaded = 0 AND uid IS NOT NULL"
   )
 
   private val setMessageValueStatement = connection.prepareStatement(
       "UPDATE messages SET " +
-          "value = ?, date = ?, subject = ?, messageId = ? " +
+          "downloaded = 1, value = ?, date = ?, subject = ?, messageId = ? " +
           "WHERE gmailId = ?"
   )
 
@@ -180,6 +217,18 @@ class Database constructor(filename: String) {
 
   private val countSelectionSizeStatement = connection.prepareStatement(
       "SELECT COUNT(*) FROM selected"
+  )
+
+  private val getMessageEnvelopeStatement = connection.prepareStatement(
+      "SELECT threadId, uid, flags, date, subject FROM messages " +
+          "WHERE gmailId = ?"
+  )
+
+  private val getSelectionStatement = connection.prepareStatement(
+      "SELECT selected.gmailId FROM selected LEFT JOIN messages " +
+          "WHERE selected.gmailId = messages.gmailId " +
+          "AND messages.uid IS NOT NULL " +
+          "ORDER BY messages.date ASC"
   )
 
   fun commit() {
@@ -256,16 +305,13 @@ class Database constructor(filename: String) {
     addMessageLabelStatement.execute()
   }
 
-  fun getUidsWithNoBody(): List<Long> {
-    val responses = getUidsWithNoBodyStatement.executeQuery()
-    try {
+  fun getNonDownloadedUids(): List<Long> {
+    getNonDownloadedUidsStatement.executeQuery().use {
+      responses ->
       val result = mutableListOf<Long>()
       while (responses.next())
         result.add(responses.getLong(1))
-      return result
-    }
-    finally {
-      responses.close()
+      return result.sorted()
     }
   }
 
@@ -312,13 +358,80 @@ class Database constructor(filename: String) {
   }
 
   fun countSelectionSize(): Int {
-    val responses = countSelectionSizeStatement.executeQuery()
-    try {
+    countSelectionSizeStatement.executeQuery().use {
+      responses ->
       responses.next()
       return responses.getInt(1)
     }
-    finally {
-      responses.close()
+  }
+
+  fun getSelection(): List<Long> {
+    getSelectionStatement.executeQuery().use {
+      responses ->
+      val result = mutableListOf<Long>()
+      while (responses.next())
+        result.add(responses.getLong(1))
+      return result
     }
   }
+
+  fun getMessage(gmailId: Long): Message {
+    getMessageEnvelopeStatement.setLong(1, gmailId)
+    getMessageEnvelopeStatement.executeQuery().use {
+      responses ->
+      if (!responses.next())
+        throw RuntimeException("Gmail ID $gmailId does not exist")
+
+      val threadId = responses.getLong(1)
+      val uid = responses.getLong(2)
+      val flags = responses.getString(3)
+      val date = Date(responses.getLong(4))
+      val subject = responses.getString(5)
+
+      fun getAddresses(kind: AddressKind): List<InternetAddress> {
+        val addressStatement = prepare(
+            "SELECT addresses.email, addresses.name " +
+                "FROM addressMap LEFT JOIN addresses " +
+                "ON addressMap.addressId = addresses.id " +
+                "WHERE addressMap.gmailId = ? " +
+                "AND addressMap.kind = ?"
+        )
+        addressStatement.setLong(1, gmailId)
+        addressStatement.setInt(2, kind.ordinal)
+        addressStatement.executeQuery().use {
+          val result = mutableListOf<InternetAddress>()
+          while (it.next()) {
+            val email = it.getString(1)
+            val name = it.getString(2)
+            result.add(InternetAddress(email, name))
+          }
+          return result
+        }
+      }
+
+      return Message(
+          gmailId = gmailId,
+          threadId = threadId,
+          uid = uid,
+          flags = flags,
+          date = date,
+          subject = subject ?: "",
+          cc = getAddresses(AddressKind.CC),
+          bcc = getAddresses(AddressKind.BCC),
+          from = getAddresses(AddressKind.FROM),
+          replyTo = getAddresses(AddressKind.REPLYTO),
+          sender = getAddresses(AddressKind.SENDER),
+          to = getAddresses(AddressKind.TO),
+          body = null
+      )
+    }
+  }
+}
+
+private inline fun <T : ResultSet, R> T.use(block: (T) -> R): R {
+    try {
+      return block(this)
+    } finally {
+      this.close()
+    }
 }

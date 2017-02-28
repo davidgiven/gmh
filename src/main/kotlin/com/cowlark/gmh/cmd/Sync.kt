@@ -208,7 +208,7 @@ fun SyncCommand(globalOptions: GlobalOptions) {
   log("fetching message bodies")
   folder.doCommand {
     p ->
-    val pendingBodies = db.getUidsWithNoBody()
+    val pendingBodies = db.getNonDownloadedUids()
     Progressbar("Downloading", pendingBodies.size).use {
       progress ->
       var count = 0

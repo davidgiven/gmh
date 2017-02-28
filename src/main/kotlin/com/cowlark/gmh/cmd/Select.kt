@@ -21,5 +21,7 @@ fun SelectCommand(globalOptions: GlobalOptions) {
   db.clearSelection()
   db.addLabelToSelection(globalOptions.rest[0])
   val count = db.countSelectionSize()
+  db.commit()
+
   log("selected $count messages")
 }
