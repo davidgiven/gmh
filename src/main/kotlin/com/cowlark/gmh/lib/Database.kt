@@ -404,7 +404,7 @@ class Database constructor(filename: String) {
   }
 
   fun labelQuery(label: String): String {
-    val statement = prepare("SELECT id FROM labels WHERE name = ?")
+    val statement = prepare("SELECT labelId FROM labels WHERE name = ?")
     statement.setString(1, label)
     statement.executeQuery().use {
       if (!it.next())
@@ -437,7 +437,9 @@ class Database constructor(filename: String) {
 
   fun getMessage(gmailId: Long): Message {
     val getMessageStatement = prepare(
-        "SELECT threadId, uid, flags, date, subject, downloaded FROM messages " +
+        "SELECT threadId, uid, flags, date, subject, downloaded " +
+            "FROM messages LEFT JOIN messageData " +
+            "ON messages.gmailId = messageData.docid " +
             "WHERE gmailId = ?"
     )
 
@@ -458,7 +460,7 @@ class Database constructor(filename: String) {
         val addressStatement = prepare(
             "SELECT addresses.email, addresses.name " +
                 "FROM addressMap LEFT JOIN addresses " +
-                "ON addressMap.addressId = addresses.id " +
+                "ON addressMap.addressId = addresses.addressId " +
                 "WHERE addressMap.gmailId = ? " +
                 "AND addressMap.kind = ?"
         )
