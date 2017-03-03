@@ -18,10 +18,10 @@ annotation class Option(
 )
 
 open class HasOptions {
-  var rest: Array<String> = arrayOf()
+  var rest: List<String> = listOf()
 }
 
-fun parseFlags(flagsObject: HasOptions, argv: Array<String>) {
+fun parseFlags(flagsObject: HasOptions, argv: List<String>) {
   val flags = mutableMapOf<String, KMutableProperty<*>>()
 
   flagsObject.javaClass.kotlin.members
@@ -55,6 +55,11 @@ fun parseFlags(flagsObject: HasOptions, argv: Array<String>) {
           return 1
         }
 
+        Boolean::class.java -> {
+          property.setter.call(flagsObject, true)
+          return 0
+        }
+
         else               -> {
           fatal("unsupported flag type " + property.returnType.javaType.typeName)
         }
@@ -78,5 +83,5 @@ fun parseFlags(flagsObject: HasOptions, argv: Array<String>) {
     index++
   }
 
-  flagsObject.rest = argv.sliceArray(index .. argv.size-1)
+  flagsObject.rest = argv.slice(index .. argv.size-1)
 }

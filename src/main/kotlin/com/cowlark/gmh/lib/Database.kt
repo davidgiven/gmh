@@ -26,7 +26,7 @@ enum class AddressKind {
   SENDER
 }
 
-class Message(
+class Message (
     val gmailId: Long,
     val threadId: Long,
     val uid: Long,
@@ -40,7 +40,12 @@ class Message(
     val replyTo: List<InternetAddress>,
     val sender: List<InternetAddress>,
     val downloaded: Boolean
-) {}
+)
+
+class Label (
+  val labelId: Long,
+  val name: String
+)
 
 fun connect_to_database(filename: String): Connection {
   val config = SQLiteConfig()
@@ -207,12 +212,6 @@ class Database constructor(filename: String) {
       "DELETE FROM selected"
   )
 
-  private val addLabelToSelectionStatement = connection.prepareStatement(
-      "INSERT INTO selected (gmailId) " +
-          "SELECT gmailId FROM labelMap WHERE " +
-          "labelId = (SELECT id FROM labels WHERE name = ?)"
-  )
-
   private val countSelectionSizeStatement = connection.prepareStatement(
       "SELECT COUNT(*) FROM selected"
   )
@@ -298,6 +297,22 @@ class Database constructor(filename: String) {
     addMessageLabelStatement.execute()
   }
 
+  fun getLabels(): Collection<Label> {
+    val labels = mutableListOf<Label>()
+
+    prepare(
+        "SELECT id, name FROM labels ORDER BY id ASC"
+    ).executeQuery().use {
+      while (it.next()) {
+        val id = it.getLong(1)
+        val name = it.getString(2)
+        labels.add(Label(id, name))
+      }
+    }
+
+    return labels
+  }
+
   fun getNonDownloadedUids(): List<Long> {
     val statement = prepare(
         "SELECT uid FROM messages WHERE " +
@@ -351,11 +366,6 @@ class Database constructor(filename: String) {
     clearSelectionStatement.execute()
   }
 
-  fun addLabelToSelection(label: String) {
-    addLabelToSelectionStatement.setString(1, label)
-    addLabelToSelectionStatement.execute()
-  }
-
   fun countSelectionSize(): Int {
     countSelectionSizeStatement.executeQuery().use {
       responses ->
@@ -372,6 +382,43 @@ class Database constructor(filename: String) {
         result.add(responses.getLong(1))
       return result
     }
+  }
+
+  fun labelQuery(label: Long): String {
+    return "(messages.gmailId IN " +
+        "(SELECT gmailId FROM labelMap WHERE labelId = $label))"
+  }
+
+  fun labelQuery(label: String): String {
+    val statement = prepare("SELECT id FROM labels WHERE name = ?")
+    statement.setString(1, label)
+    statement.executeQuery().use {
+      if (!it.next())
+        return "0"
+
+      val id = it.getLong(1)
+      return labelQuery(id)
+    }
+  }
+
+  fun flagQuery(flags: String): String {
+    val conditions = mutableListOf<String>()
+    flags.map {
+      val c = it.toUpperCase()
+      if ((c < 'A') || (c > 'Z'))
+        throw RuntimeException("'$c' is not a valid flag character")
+
+      conditions.add("(messages.flags LIKE \"%$c%\")")
+    }
+
+    return "(" + conditions.joinToString(" AND ") + ")"
+  }
+
+  fun addToSelection(query: String) {
+    val sql = "INSERT INTO selected (gmailId) " +
+          "SELECT gmailId FROM messages WHERE (" + query + ")"
+    log(sql)
+    prepare(sql).execute()
   }
 
   fun getMessage(gmailId: Long): Message {
@@ -433,7 +480,7 @@ class Database constructor(filename: String) {
   }
 }
 
-private inline fun <T : ResultSet, R> T.use(block: (T) -> R): R {
+private inline fun <T: ResultSet, R> T.use(block: (T) -> R): R {
     try {
       return block(this)
     } finally {

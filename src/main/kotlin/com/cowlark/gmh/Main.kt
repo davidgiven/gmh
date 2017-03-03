@@ -7,6 +7,7 @@
 
 package com.cowlark.gmh
 
+import com.cowlark.gmh.cmd.LabelsCommand
 import com.cowlark.gmh.cmd.ScanCommand
 import com.cowlark.gmh.cmd.SelectCommand
 import com.cowlark.gmh.cmd.SyncCommand
@@ -24,20 +25,25 @@ class GlobalOptions : HasOptions() {
   ) var databasePath = System.getenv("HOME") + "/.gmh.sqlite"
 }
 
-fun main(argv: Array<String>) {
+fun main(argv: List<String>) {
   val globalOptions = GlobalOptions()
   parseFlags(globalOptions, argv)
 
   val command = globalOptions.rest.getOrElse(0, {
     fatal("no command given --- try 'help'")
   })
-  globalOptions.rest = globalOptions.rest.sliceArray(1 .. globalOptions.rest.size-1)
+  globalOptions.rest = globalOptions.rest.slice(1 .. globalOptions.rest.size-1)
 
   when (command) {
     "sync"   -> SyncCommand(globalOptions)
     "select" -> SelectCommand(globalOptions)
     "scan"   -> ScanCommand(globalOptions)
+    "labels" -> LabelsCommand(globalOptions)
     "help"   -> log("no help yet")
     else     -> fatal("unexpected parameter '$command' --- try 'help'")
   }
+}
+
+fun main(argv: Array<String>) {
+  main(argv.toList())
 }
