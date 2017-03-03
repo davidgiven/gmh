@@ -10,7 +10,6 @@ package com.cowlark.gmh.cmd
 import com.cowlark.gmh.GlobalOptions
 import com.cowlark.gmh.lib.Database
 import com.cowlark.gmh.lib.fatal
-import javax.mail.internet.MimeUtility
 
 fun ScanCommand(globalOptions: GlobalOptions) {
   val db = Database(globalOptions.databasePath)
@@ -31,7 +30,7 @@ fun ScanCommand(globalOptions: GlobalOptions) {
       if (!message.from.isEmpty())
         sb.append(message.from[0])
       sb.append(":")
-      sb.append(MimeUtility.decodeText(message.subject))
+      sb.append(message.subject)
     } else {
       sb.append(" (not downloaded)")
     }

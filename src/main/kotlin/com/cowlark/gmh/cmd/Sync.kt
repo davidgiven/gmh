@@ -135,8 +135,12 @@ private class MessageSkeleton(response: FetchResponse) {
       db.setMessageFlags(gmailId, flags!!)
     if (labels != null)
       db.setMessageLabels(gmailId, labels!!)
-    if (value != null)
-      db.setMessageValue(gmailId, value!!, envelope!!)
+    if (value != null) {
+      val split = value!!.indexOf("\r\n\r\n")
+      val header = value!!.slice(0 .. split-1)
+      val body = value!!.substring(split+4)
+      db.setMessageValue(gmailId, header, body, envelope!!)
+    }
   }
 }
 

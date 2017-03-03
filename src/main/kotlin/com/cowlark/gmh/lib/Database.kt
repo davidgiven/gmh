@@ -15,6 +15,7 @@ import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.util.*
 import javax.mail.internet.InternetAddress
+import javax.mail.internet.MimeUtility
 
 
 enum class AddressKind {
@@ -68,11 +69,16 @@ fun connect_to_database(filename: String): Connection {
             threadId INTEGER,
             uid INTEGER,
             flags TEXT,
-            value BLOB,
             date INTEGER,
-            subject TEXT,
+            headers TEXT,
             messageId TEXT,
             downloaded INTEGER DEFAULT 0
+        )
+    """)
+  statement.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS messageData USING FTS4(
+            subject TEXT,
+            body TEXT
         )
     """)
   statement.execute("""
@@ -86,7 +92,7 @@ fun connect_to_database(filename: String): Connection {
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS labels (
-            id INTEGER PRIMARY KEY,
+            labelId INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )
     """)
@@ -98,7 +104,7 @@ fun connect_to_database(filename: String): Connection {
             gmailId INTEGER,
             labelId INTEGER,
             FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE,
-            FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
+            FOREIGN KEY (labelId) REFERENCES labels(labelId) ON DELETE CASCADE
         )
     """)
   statement.execute("""
@@ -109,7 +115,7 @@ fun connect_to_database(filename: String): Connection {
     """)
   statement.execute("""
         CREATE TABLE IF NOT EXISTS addresses (
-            id INTEGER PRIMARY KEY,
+            addressId INTEGER PRIMARY KEY,
             email TEXT UNIQUE,
             name TEXT
         )
@@ -123,7 +129,7 @@ fun connect_to_database(filename: String): Connection {
             addressId INTEGER,
             kind INTEGER,
             FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE,
-            FOREIGN KEY (addressId) REFERENCES addresses(id) ON DELETE CASCADE
+            FOREIGN KEY (addressId) REFERENCES addresses(addressId) ON DELETE CASCADE
         )
     """)
   statement.execute("""
@@ -190,13 +196,7 @@ class Database constructor(filename: String) {
 
   private val addMessageLabelStatement = connection.prepareStatement(
       "INSERT INTO labelMap (gmailId, labelId) VALUES (" +
-          "?, (SELECT id FROM labels WHERE name = ?))"
-  )
-
-  private val setMessageValueStatement = connection.prepareStatement(
-      "UPDATE messages SET " +
-          "downloaded = 1, value = ?, date = ?, subject = ?, messageId = ? " +
-          "WHERE gmailId = ?"
+          "?, (SELECT labelId FROM labels WHERE name = ?))"
   )
 
   private val addAddressStatement = connection.prepareStatement(
@@ -205,7 +205,7 @@ class Database constructor(filename: String) {
 
   private val addMessageAddressStatement = connection.prepareStatement(
       "INSERT INTO addressMap (gmailId, addressId, kind) VALUES (" +
-          "?, (SELECT id FROM addresses WHERE email = ?), ?)"
+          "?, (SELECT addressId FROM addresses WHERE email = ?), ?)"
   )
 
   private val clearSelectionStatement = connection.prepareStatement(
@@ -329,13 +329,27 @@ class Database constructor(filename: String) {
     }
   }
 
-  fun setMessageValue(gmailId: Long, value: String, envelope: ENVELOPE) {
-    setMessageValueStatement.setString(1, value)
-    setMessageValueStatement.setLong(2, envelope.date?.time ?: 0L)
-    setMessageValueStatement.setString(3, envelope.subject)
-    setMessageValueStatement.setString(4, envelope.messageId)
-    setMessageValueStatement.setLong(5, gmailId)
-    setMessageValueStatement.execute()
+  fun setMessageValue(gmailId: Long, headers: String, body: String, envelope: ENVELOPE) {
+    val setValueStatement = prepare(
+        "UPDATE messages SET " +
+            "downloaded = 1, date = ?, messageId = ?, headers = ? " +
+            "WHERE gmailId = ?"
+    )
+
+    setValueStatement.setLong(1, envelope.date?.time ?: 0L)
+    setValueStatement.setString(2, envelope.messageId)
+    setValueStatement.setString(3, headers)
+    setValueStatement.setLong(4, gmailId)
+    setValueStatement.execute()
+
+    val setMessageDataStatement = prepare(
+        "INSERT INTO messageData (docid, subject, body) VALUES (?, ?, ?)"
+    )
+    setMessageDataStatement.setLong(1, gmailId)
+    setMessageDataStatement.setString(
+        2, MimeUtility.decodeText(envelope.subject ?: ""))
+    setMessageDataStatement.setString(3, body)
+    setMessageDataStatement.execute()
 
     fun add(address: InternetAddress, kind: AddressKind) {
       addAddressStatement.setString(1, address.address)
