@@ -9,10 +9,13 @@ package com.cowlark.gmh.cmd
 
 import com.cowlark.gmh.GlobalOptions
 import com.cowlark.gmh.lib.Database
+import com.cowlark.gmh.lib.HasOptions
+import com.cowlark.gmh.lib.Option
 import com.cowlark.gmh.lib.Progressbar
 import com.cowlark.gmh.lib.batch
 import com.cowlark.gmh.lib.fatal
 import com.cowlark.gmh.lib.log
+import com.cowlark.gmh.lib.parseFlags
 import com.sun.mail.gimap.GmailFolder
 import com.sun.mail.gimap.GmailStore
 import com.sun.mail.iap.Argument
@@ -28,8 +31,15 @@ import javax.mail.Flags
 import javax.mail.Folder
 import javax.mail.Session
 
-private val SQUARE_BRACKET: Byte = '['.toByte()
 private val FETCH_BATCH_SIZE = 500
+
+class SyncOptions : HasOptions() {
+  @Option(
+      longName = "--force-uid-refresh",
+      help = "Force a UID resync (useful is the database gets confused)"
+  ) var forceUidRefresh = false
+}
+
 
 private fun connect_to_imap(username: String, password: String): GmailFolder {
   val properties = System.getProperties()
@@ -85,8 +95,8 @@ private class MessageSkeleton(response: FetchResponse) {
 
       flagsObject.userFlags.map {
         when (it) {
-          "Junk"            -> flags += "-"
-          "NonJunk"         -> flags += "+"
+          "Junk"            -> flags += "J"
+          "NonJunk"         -> flags += "H"
           "\$Forwarded"     -> flags += "F"
           "\$Phishing"      -> flags += "P"
           "Old"             -> flags += "O"
@@ -131,6 +141,11 @@ private class MessageSkeleton(response: FetchResponse) {
 }
 
 fun SyncCommand(globalOptions: GlobalOptions) {
+  val syncOptions = SyncOptions()
+  parseFlags(syncOptions, globalOptions.rest)
+  if (syncOptions.rest.isNotEmpty())
+    fatal("sync option error")
+
   log("connecting")
   val db = Database(globalOptions.databasePath)
   val folder = connect_to_imap("david.given@gmail.com", "fjsqqmpawuvmrxmd")
@@ -138,17 +153,11 @@ fun SyncCommand(globalOptions: GlobalOptions) {
 
   var uidValidity = db.get("uidvalidity", "0").toLong()
   val modSeq = db.get("modseq", "0").toLong()
-  var newModSeq = modSeq
+  var newModSeq = folder.highestModSeq
+  log("fetching updates from $modSeq to $newModSeq")
 
   fun process_response(response: Response) {
     if (response.isOK) {
-      response.skipSpaces()
-      if (response.readByte() == SQUARE_BRACKET) {
-        when (response.readAtom()) {
-          "HIGHESTMODSEQ" ->
-            newModSeq = response.readLong()
-        }
-      }
     } else if (response.isBAD) {
       fatal("IMAP server returned error: " + response)
     } else if (response is FetchResponse) {
@@ -173,7 +182,7 @@ fun SyncCommand(globalOptions: GlobalOptions) {
       process_response(responses[i])
   }
 
-  if (uidValidity != folder.uidValidity) {
+  if (syncOptions.forceUidRefresh || (uidValidity != folder.uidValidity)) {
     log("refreshing UIDs")
     db.set("uidvalidity", folder.uidValidity.toString())
     folder.doCommand {
@@ -205,6 +214,7 @@ fun SyncCommand(globalOptions: GlobalOptions) {
                 .writeAtom("1:*")
                 .writeArgument(
                     Argument()
+                        .writeAtom("UID")
                         .writeAtom("X-GM-MSGID")
                         .writeAtom("X-GM-LABELS")
                         .writeAtom("FLAGS")
