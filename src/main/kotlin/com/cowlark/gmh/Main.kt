@@ -11,6 +11,7 @@ import com.cowlark.gmh.cmd.LabelsCommand
 import com.cowlark.gmh.cmd.ScanCommand
 import com.cowlark.gmh.cmd.SelectCommand
 import com.cowlark.gmh.cmd.SyncCommand
+import com.cowlark.gmh.cmd.ThreadsCommand
 import com.cowlark.gmh.lib.HasOptions
 import com.cowlark.gmh.lib.Option
 import com.cowlark.gmh.lib.fatal
@@ -32,15 +33,16 @@ fun main(argv: List<String>) {
   val command = globalOptions.rest.getOrElse(0, {
     fatal("no command given --- try 'help'")
   })
-  globalOptions.rest = globalOptions.rest.slice(1 .. globalOptions.rest.size-1)
+  globalOptions.rest = globalOptions.rest.slice(1..globalOptions.rest.size - 1)
 
   when (command) {
-    "sync"   -> SyncCommand(globalOptions)
-    "select" -> SelectCommand(globalOptions)
-    "scan"   -> ScanCommand(globalOptions)
-    "labels" -> LabelsCommand(globalOptions)
-    "help"   -> log("no help yet")
-    else     -> fatal("unexpected parameter '$command' --- try 'help'")
+    "help"    -> log("no help yet")
+    "labels"  -> LabelsCommand(globalOptions)
+    "scan"    -> ScanCommand(globalOptions)
+    "select"  -> SelectCommand(globalOptions)
+    "sync"    -> SyncCommand(globalOptions)
+    "threads" -> ThreadsCommand(globalOptions)
+    else      -> fatal("unexpected parameter '$command' --- try 'help'")
   }
 }
 

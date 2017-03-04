@@ -85,6 +85,9 @@ fun connect_to_database(filename: String): Connection {
         CREATE INDEX IF NOT EXISTS messages_by_uid ON messages (uid)
     """)
   statement.execute("""
+        CREATE INDEX IF NOT EXISTS messages_by_threadId ON messages (uid)
+    """)
+  statement.execute("""
         CREATE INDEX IF NOT EXISTS messages_by_downloaded ON messages (downloaded)
     """)
   statement.execute("""
@@ -214,13 +217,6 @@ class Database constructor(filename: String) {
 
   private val countSelectionSizeStatement = connection.prepareStatement(
       "SELECT COUNT(*) FROM selected"
-  )
-
-  private val getSelectionStatement = connection.prepareStatement(
-      "SELECT selected.gmailId FROM selected LEFT JOIN messages " +
-          "WHERE selected.gmailId = messages.gmailId " +
-          "AND messages.uid IS NOT NULL " +
-          "ORDER BY messages.date ASC"
   )
 
   fun commit() {
@@ -389,7 +385,28 @@ class Database constructor(filename: String) {
   }
 
   fun getSelection(): List<Long> {
-    getSelectionStatement.executeQuery().use {
+    prepare(
+        "SELECT selected.gmailId FROM selected LEFT JOIN messages " +
+            "WHERE selected.gmailId = messages.gmailId " +
+            "AND messages.uid IS NOT NULL " +
+            "ORDER BY messages.date ASC"
+    ).executeQuery().use {
+      responses ->
+      val result = mutableListOf<Long>()
+      while (responses.next())
+        result.add(responses.getLong(1))
+      return result
+    }
+  }
+
+  fun getSelectionThreads(): List<Long> {
+    prepare(
+        "SELECT DISTINCT messages.threadId " +
+            "FROM selected LEFT JOIN messages " +
+            "ON selected.gmailId = messages.gmailId " +
+            "AND messages.uid IS NOT NULL " +
+            "ORDER BY messages.date ASC"
+    ).executeQuery().use {
       responses ->
       val result = mutableListOf<Long>()
       while (responses.next())
@@ -492,6 +509,22 @@ class Database constructor(filename: String) {
           to = getAddresses(AddressKind.TO),
           downloaded = downloaded
       )
+    }
+  }
+
+  fun getThread(threadId: Long): List<Message> {
+    val getThreadStatement = prepare(
+        "SELECT gmailId FROM messages WHERE threadId = ? ORDER BY date ASC"
+    )
+    getThreadStatement.setLong(1, threadId)
+    getThreadStatement.executeQuery().use {
+      val messages = mutableListOf<Message>()
+      while (it.next()) {
+        val gmailId = it.getLong(1)
+        val message = getMessage(gmailId)
+        messages.add(message)
+      }
+      return messages
     }
   }
 }
