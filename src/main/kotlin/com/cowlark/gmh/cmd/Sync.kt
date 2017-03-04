@@ -31,13 +31,16 @@ import javax.mail.Flags
 import javax.mail.Folder
 import javax.mail.Session
 
-private val FETCH_BATCH_SIZE = 500
-
 class SyncOptions : HasOptions() {
   @Option(
       longName = "--force-uid-refresh",
       help = "Force a UID resync (useful is the database gets confused)"
   ) var forceUidRefresh = false
+
+  @Option(
+      longName = "--batch-size",
+      help = "Fetch (and commit) this many messages in a single batch"
+  ) var batchSize = 500
 }
 
 
@@ -119,13 +122,12 @@ private class MessageSkeleton(response: FetchResponse) {
     }
 
     envelope = response.getItem(ENVELOPE::class.java)
-
-    if (gmailId == 0L)
-      log(String.format("message with UID %d has no message ID. This is weird.", uid));
   }
 
   fun set(db: Database) {
-    assert(gmailId != 0L)
+    if (gmailId == 0L)
+      return;
+
     db.addMessage(gmailId)
     if (threadId != 0L)
       db.setMessageThreadId(gmailId, threadId)
@@ -243,7 +245,7 @@ fun SyncCommand(globalOptions: GlobalOptions) {
       progress ->
       var count = 0
       progress.show(0)
-      pendingBodies.asSequence().batch(FETCH_BATCH_SIZE).forEach {
+      pendingBodies.asSequence().batch(syncOptions.batchSize).forEach {
         uids ->
 
         val uidlist = StringUtils.join(uids.map(Long::toString), ",")

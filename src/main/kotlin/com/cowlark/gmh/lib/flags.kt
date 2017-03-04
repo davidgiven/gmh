@@ -60,6 +60,11 @@ fun parseFlags(flagsObject: HasOptions, argv: List<String>) {
           return 0
         }
 
+        Integer::class.java, Int::class.java -> {
+          property.setter.call(flagsObject, value!!.toInt())
+          return 1
+        }
+
         else               -> {
           fatal("unsupported flag type " + property.returnType.javaType.typeName)
         }
