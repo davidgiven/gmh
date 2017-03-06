@@ -3,25 +3,22 @@
 module Main where
 import qualified Flags as Flags
 import qualified System.Environment as Environment
-
-data GlobalOptions =
-    GlobalOptions {
-        databasePath :: String
-    } deriving (Show)
+import qualified LoginCommand as LoginCommand
+import GlobalOptions
 
 main :: IO ()
 main =
     do
         argv <- Environment.getArgs
-        globalOptions <- return (Flags.parse defaultOptions argv optionsDescription)
-        print globalOptions
+        (Flags.ParsedFlags globalOptions rest) <-
+            return (Flags.parse defaultGlobalOptions argv globalOptionsDescription)
+        doCommand globalOptions rest
     where
-        defaultOptions =
-            GlobalOptions {
-                databasePath = "gmh.sqlite"
-            }
-        optionsDescription =
-            [
-                Flags.stringFlag ["-D", "--database"] setDatabasePath
-            ]
-        setDatabasePath options value = options { databasePath = value }
+        doCommand :: GlobalOptions -> [String] -> IO ()
+        doCommand globalOptions [] =
+            error "no command specified (try --help)"
+
+        doCommand globalOptions ("login":rest) = LoginCommand.run globalOptions rest
+
+        doCommand globalOptions (command:rest) =
+            error ("command '" ++ command ++ "' not recognised (try --help)")

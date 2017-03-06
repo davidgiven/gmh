@@ -13,6 +13,12 @@ data Flag r =
         consumes :: Bool
     }
 
+data ParsedFlags r =
+    ParsedFlags {
+        values :: r,
+        rest :: [String]
+    }
+
 stringFlag :: [String] -> SetsValueWith r String -> Flag r
 stringFlag names setter = Flag names setter True
 
@@ -21,16 +27,16 @@ boolFlag names setter = Flag names wrappedSetter False
     where
         wrappedSetter old value = setter old True
 
-parse :: forall r. r -> [String] -> [Flag r] -> r
+parse :: forall r. r -> [String] -> [Flag r] -> ParsedFlags r
 parse values argv flagDescription =
-    accumulate values argv
+    accumulate (ParsedFlags values argv)
     where
-        accumulate :: r -> [String] -> r
-        accumulate values [] = values
-        accumulate values (first:[]) = doAccumulate values first "" []
-        accumulate values (first:second:argv) = doAccumulate values first second argv
+        accumulate :: ParsedFlags r -> ParsedFlags r
+        accumulate p@(ParsedFlags values []) = p
+        accumulate (ParsedFlags values (first:[])) = doAccumulate values first "" []
+        accumulate (ParsedFlags values (first:second:argv)) = doAccumulate values first second argv
 
-        doAccumulate :: r -> String -> String -> [String] -> r
+        doAccumulate :: r -> String -> String -> [String] -> ParsedFlags r
         doAccumulate values first@('-':_) second argv =
             -- this is a flag; parse it.
             case (StringMap.lookup first flagMap) of
@@ -39,12 +45,12 @@ parse values argv flagDescription =
                         newValues = (setter flag) values second
                 Nothing -> error ("flag '" ++ first ++ "' is not recognised")
             where
-                recurse newValues False = accumulate newValues (second:argv)
-                recurse newValues True = accumulate newValues argv
+                recurse newValues False = accumulate (ParsedFlags newValues (second:argv))
+                recurse newValues True = accumulate (ParsedFlags newValues argv)
 
-        doAccumulate values _ second argv =
+        doAccumulate values first second argv =
             -- this is not a flag; stop parsing here.
-            values
+            ParsedFlags values (first:second:argv)
 
         flagMap =
             foldl insertFlags StringMap.empty flagDescription
