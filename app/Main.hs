@@ -18,7 +18,9 @@ main =
         doCommand globalOptions [] =
             error "no command specified (try --help)"
 
-        doCommand globalOptions ("login":rest) = LoginCommand.run globalOptions rest
-
         doCommand globalOptions (command:rest) =
+            (whichCommand command) globalOptions rest
+
+        whichCommand "login" = LoginCommand.run
+        whichCommand command =
             error ("command '" ++ command ++ "' not recognised (try --help)")

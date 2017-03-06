@@ -20,11 +20,13 @@ executable gmh-exe
   build-depends:
     base,
     data-stringmap,
-    sqlite-simple
+    sqlite-simple,
+    unix
   default-language:    Haskell2010
   other-modules:
     Flags,
     GlobalOptions,
+    Database,
     LoginCommand
 
 test-suite gmh-test
