@@ -1,14 +1,15 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 module Flags where
-import qualified Data.StringMap as StringMap
+import qualified Data.Map.Strict as Map
+import Data.Text as Text
+import Data.Monoid
 
 type SetsValueWith r t = r -> t -> r
-type SetsValue r = SetsValueWith r String
-type SetsRest r = SetsValueWith r [String]
+type SetsValue r = SetsValueWith r Text
+type SetsRest r = SetsValueWith r [Text]
 
 data Flag r =
     Flag {
-        names :: [String],
+        names :: [Text],
         setter :: SetsValue r,
         consumes :: Bool
     }
@@ -16,18 +17,18 @@ data Flag r =
 data ParsedFlags r =
     ParsedFlags {
         values :: r,
-        rest :: [String]
+        rest :: [Text]
     }
 
-stringFlag :: [String] -> SetsValueWith r String -> Flag r
-stringFlag names setter = Flag names setter True
+textFlag :: [Text] -> SetsValueWith r Text -> Flag r
+textFlag names setter = Flag names setter True
 
-boolFlag :: [String] -> SetsValueWith r Bool -> Flag r
+boolFlag :: [Text] -> SetsValueWith r Bool -> Flag r
 boolFlag names setter = Flag names wrappedSetter False
     where
         wrappedSetter old value = setter old True
 
-parse :: forall r. r -> [String] -> [Flag r] -> ParsedFlags r
+parse :: forall r. r -> [Text] -> [Flag r] -> ParsedFlags r
 parse values argv flagDescription =
     accumulate (ParsedFlags values argv)
     where
@@ -36,26 +37,26 @@ parse values argv flagDescription =
         accumulate (ParsedFlags values (first:[])) = doAccumulate values first "" []
         accumulate (ParsedFlags values (first:second:argv)) = doAccumulate values first second argv
 
-        doAccumulate :: r -> String -> String -> [String] -> ParsedFlags r
-        doAccumulate values first@('-':_) second argv =
-            -- this is a flag; parse it.
-            case (StringMap.lookup first flagMap) of
-                Just flag -> recurse newValues (consumes flag)
-                    where
-                        newValues = (setter flag) values second
-                Nothing -> error ("flag '" ++ first ++ "' is not recognised")
-            where
-                recurse newValues False = accumulate (ParsedFlags newValues (second:argv))
-                recurse newValues True = accumulate (ParsedFlags newValues argv)
+        doAccumulate :: r -> Text -> Text -> [Text] -> ParsedFlags r
+        doAccumulate values first second argv
+            | (Text.head first) == '-' =
+                case (Map.lookup first flagMap) of
+                    Just flag -> recurse newValues (consumes flag)
+                        where
+                            newValues = (setter flag) values second
+                            recurse newValues False = accumulate (ParsedFlags newValues (second:argv))
+                            recurse newValues True = accumulate (ParsedFlags newValues argv)
+                    Nothing -> error $ unpack ("flag '" <> first <> "' is not recognised")
+            | (second == "") && (argv == []) =
+                ParsedFlags values [first]
+            | otherwise =
+                ParsedFlags values (first:second:argv)
 
-        doAccumulate values first second argv =
-            -- this is not a flag; stop parsing here.
-            ParsedFlags values (first:second:argv)
-
+        flagMap :: Map.Map Text (Flag r)
         flagMap =
-            foldl insertFlags StringMap.empty flagDescription
+            Prelude.foldl insertFlags Map.empty flagDescription
         insertFlags map arg =
-            foldl insertFlag map (names arg)
+            Prelude.foldl insertFlag map (names arg)
                 where
                     insertFlag map name =
-                        StringMap.insert name arg map
+                        Map.insert name arg map

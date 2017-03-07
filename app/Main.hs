@@ -1,26 +1,30 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module Main where
 import qualified Flags as Flags
 import qualified System.Environment as Environment
 import qualified LoginCommand as LoginCommand
+import qualified InitCommand as InitCommand
 import GlobalOptions
+import Data.Text
+import Data.Monoid
 
 main :: IO ()
 main =
     do
-        argv <- Environment.getArgs
+        argvStrings <- Environment.getArgs
+        let argv = Prelude.map pack argvStrings
         (Flags.ParsedFlags globalOptions rest) <-
             return (Flags.parse defaultGlobalOptions argv globalOptionsDescription)
         doCommand globalOptions rest
     where
-        doCommand :: GlobalOptions -> [String] -> IO ()
+        doCommand :: GlobalOptions -> [Text] -> IO ()
         doCommand globalOptions [] =
             error "no command specified (try --help)"
 
         doCommand globalOptions (command:rest) =
             (whichCommand command) globalOptions rest
 
+        whichCommand :: Text -> (GlobalOptions -> [Text] -> IO ())
         whichCommand "login" = LoginCommand.run
+        whichCommand "init" = InitCommand.run
         whichCommand command =
-            error ("command '" ++ command ++ "' not recognised (try --help)")
+            error $ unpack ("command '" <> command <> "' not recognised (try --help)")

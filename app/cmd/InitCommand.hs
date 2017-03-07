@@ -1,4 +1,4 @@
-module LoginCommand where
+module InitCommand where
 import GlobalOptions
 import qualified Flags as Flags
 import qualified Database as Database
@@ -12,15 +12,14 @@ optionsDescription = []
 run :: GlobalOptions -> [Text] -> IO ()
 run globalOptions argv = do
     case argv of
-        (username:password:[]) -> doLogin globalOptions username password
-        _ -> error "syntax: login <username> <password>"
+        [] -> doInit globalOptions
+        _ -> error "syntax: init"
     where
         (Flags.ParsedFlags options rest) = Flags.parse defaultOptions argv optionsDescription
 
-doLogin :: GlobalOptions -> Text -> Text -> IO ()
-doLogin globalOptions username password = do
-    Posix.setFileMode (unpack (databasePath globalOptions)) 0o600
+doInit :: GlobalOptions -> IO ()
+doInit globalOptions = do
     db <- Database.open (databasePath globalOptions)
-    Database.setVariable db "username" username
-    Database.setVariable db "password" password
+    Database.init db
     Database.commit db
+    Posix.setFileMode (unpack (databasePath globalOptions)) 0o600

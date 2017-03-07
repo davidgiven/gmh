@@ -1,9 +1,10 @@
 module GlobalOptions where
 import qualified Flags as Flags
+import Data.Text
 
 data GlobalOptions =
     GlobalOptions {
-        databasePath :: String
+        databasePath :: Text
     } deriving (Show)
 
 defaultGlobalOptions :: GlobalOptions
@@ -15,7 +16,7 @@ defaultGlobalOptions =
 globalOptionsDescription :: [Flags.Flag GlobalOptions]
 globalOptionsDescription =
     [
-        Flags.stringFlag ["-D", "--database"] setDatabasePath
+        Flags.textFlag ["-D", "--database"] setDatabasePath
     ]
     where
         setDatabasePath options value = options { databasePath = value }
