@@ -3,6 +3,7 @@ import qualified Flags as Flags
 import qualified System.Environment as Environment
 import qualified LoginCommand as LoginCommand
 import qualified InitCommand as InitCommand
+import qualified SyncCommand as SyncCommand
 import GlobalOptions
 import Data.Text
 import Data.Monoid
@@ -26,5 +27,6 @@ main =
         whichCommand :: Text -> (GlobalOptions -> [Text] -> IO ())
         whichCommand "login" = LoginCommand.run
         whichCommand "init" = InitCommand.run
+        whichCommand "sync" = SyncCommand.run
         whichCommand command =
             error $ unpack ("command '" <> command <> "' not recognised (try --help)")

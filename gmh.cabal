@@ -23,15 +23,19 @@ executable gmh-exe
     unix,
     raw-strings-qq,
     text,
-    containers
+    containers,
+    imap,
+    connection,
+    list-t
   default-language:    Haskell2010
   other-modules:
     Flags,
     GlobalOptions,
     Database,
     LoginCommand,
-    InitCommand
-  extensions:
+    InitCommand,
+    SyncCommand
+  default-extensions:
     OverloadedStrings,
     NamedFieldPuns,
     QuasiQuotes,

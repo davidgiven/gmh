@@ -49,6 +49,15 @@ setVariable conn name value = do
     SQLite.step stmt
     return ()
 
+getVariable :: Connection -> Text -> Text -> IO Text
+getVariable conn name defaultValue = do
+    stmt <- prepare conn "SELECT value FROM variables WHERE (name = ?)"
+    SQLite.bindSQLData stmt 1 (SQLite.SQLText name)
+    result <- SQLite.step stmt
+    case result of
+        SQLite.Row -> SQLite.columnText stmt 0
+        SQLite.Done -> return defaultValue
+
 sqlInitScript :: Text
 sqlInitScript = [QQ.r|
     CREATE TABLE IF NOT EXISTS variables (

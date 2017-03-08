@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-8.3
+resolver: lts-7.9
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,15 +37,15 @@ resolver: lts-8.3
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - '.'
+- location:
+    git: https://github.com/mkawalec/imap.git
+    commit: a80f9f18dfe5123fbc95a19628cd26a0776d5630
+  extra-dep: true
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps: [
-  'data-stringmap-1.0.1.1',
-  'direct-sqlite-2.3.19',
-  'unix-2.7.2.1',
-  'raw-strings-qq-1.1',
-  'test-1.2.2.1',
-  'containers-0.5.7.1'
+  'rolling-queue-0.1'
 ]
 
 # Override default flag values for local packages and extra-deps
