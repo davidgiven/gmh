@@ -3,16 +3,25 @@ import GlobalOptions
 import qualified Flags as Flags
 import qualified Database as Database
 import qualified System.Posix.Files as Posix
+import Data.IORef
 import Data.Text
 import qualified Network.Connection as Connection
 import qualified Network.IMAP as IMAP
 import qualified Network.IMAP.Types as IMAP
 import Network.IMAP.Types (IMAPConnection, IMAPSettings)
-import ListT (toList, ListT)
+import ListT (ListT)
+import qualified ListT as ListT
 
 data Options = Options {}
 defaultOptions = Options {}
 optionsDescription = []
+
+data State =
+    State {
+        uidValidity :: Int,
+        messageCount :: Int,
+        highestModSeq :: Int
+    } deriving (Show)
 
 run :: GlobalOptions -> [Text] -> IO ()
 run globalOptions argv = do
@@ -25,11 +34,19 @@ run globalOptions argv = do
 doSync :: GlobalOptions -> IO ()
 doSync globalOptions = do
     db <- Database.open (databasePath globalOptions)
-    imap <- connect db
+    state <- newIORef defaultState
+    imap <- connect db state
     return ()
+    where
+        defaultState =
+            State {
+                uidValidity = 0,
+                messageCount = 0,
+                highestModSeq = 0
+            }
 
-connect :: Database.Connection -> IO IMAPConnection
-connect db = do
+connect :: Database.Connection -> IORef State -> IO IMAPConnection
+connect db state = do
     username <- Database.getVariable db "username" ""
     password <- Database.getVariable db "password" ""
     if (username == "") || (password == "") then
@@ -40,15 +57,61 @@ connect db = do
     print "connecting..."
     imap <- IMAP.connectServer imapParams Nothing
     print "authenticating..."
-    result <- toList $ IMAP.login imap username password
-    processResults result
+    expectOK state $ IMAP.login imap username password
+    print "opening mailbox..."
+    expectOK state $ IMAP.select imap "\"[Gmail]/All Mail\""
+    s <- readIORef state
+    print s
     return imap
     where
         tlsSettings = Connection.TLSSettingsSimple False False False
         imapParams = Connection.ConnectionParams "imap.gmail.com" 993 (Just tlsSettings) Nothing
 
-processResults :: [IMAP.CommandResult] -> IO ()
-processResults [] = do return ()
-processResults (result:rest) = do
-    print result
-    processResults rest
+expectOK :: IORef State -> ListT IO IMAP.CommandResult -> IO ()
+expectOK state results = do
+    tagged <- processResponses state results
+    case IMAP.resultState tagged of
+        IMAP.OK -> return ()
+        _ -> error ("bad response from IMAP command: " ++ show tagged)
+
+processResponse :: IORef State -> IMAP.UntaggedResult -> IO ()
+processResponse state response =
+    case response of
+        (IMAP.OKResult _) -> return ()
+        (IMAP.Recent _) -> return ()
+        (IMAP.UIDNext _) -> return ()
+        (IMAP.Flags _) -> return ()
+        (IMAP.PermanentFlags _) -> return ()
+
+        (IMAP.Exists newCount) ->
+            modifyIORef' state (\s -> s { messageCount = newCount })
+        (IMAP.UIDValidity newValidity) ->
+            modifyIORef' state (\s -> s { uidValidity = newValidity })
+        (IMAP.HighestModSeq newModSeq) ->
+            modifyIORef' state (\s -> s { highestModSeq = newModSeq })
+
+        (IMAP.Capabilities capabilities) ->
+            if (elem (IMAP.CExperimental "X-GM-EXT-1") capabilities)
+            then return ()
+            else error "server doesn't look like an IMAP server!"
+
+        response ->
+            print ("unknown IMAP response: " ++ show response)
+
+processResponses :: IORef State -> ListT IO IMAP.CommandResult -> IO IMAP.TaggedResult
+processResponses state results =
+    ListT.fold iterator defaultResult results
+    where
+        defaultResult =
+            IMAP.TaggedResult {
+                IMAP.commandId = "",
+                IMAP.resultState = IMAP.BAD,
+                IMAP.resultRest = "missing tagged result response to command"
+            }
+
+        iterator :: IMAP.TaggedResult -> IMAP.CommandResult -> IO IMAP.TaggedResult
+        iterator old (IMAP.Untagged response) = do
+            processResponse state response
+            return old
+        iterator old (IMAP.Tagged response) = do
+            return response
