@@ -4,6 +4,7 @@ import qualified System.Environment as Environment
 import qualified LoginCommand as LoginCommand
 import qualified InitCommand as InitCommand
 import qualified SyncCommand as SyncCommand
+import qualified UI as UI
 import GlobalOptions
 import Data.Text
 import Data.Monoid
@@ -15,6 +16,7 @@ main =
         let argv = Prelude.map pack argvStrings
         (Flags.ParsedFlags globalOptions rest) <-
             return (Flags.parse defaultGlobalOptions argv globalOptionsDescription)
+        UI.init
         doCommand globalOptions rest
     where
         doCommand :: GlobalOptions -> [Text] -> IO ()

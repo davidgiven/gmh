@@ -34,7 +34,8 @@ executable gmh-exe
     Database,
     LoginCommand,
     InitCommand,
-    SyncCommand
+    SyncCommand,
+    UI
   default-extensions:
     OverloadedStrings,
     NamedFieldPuns,

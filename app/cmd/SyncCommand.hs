@@ -11,6 +11,7 @@ import qualified Network.IMAP.Types as IMAP
 import Network.IMAP.Types (IMAPConnection, IMAPSettings)
 import ListT (ListT)
 import qualified ListT as ListT
+import qualified UI as UI
 
 data Options = Options {}
 defaultOptions = Options {}
@@ -54,11 +55,11 @@ connect db state = do
     else
         return ()
 
-    print "connecting..."
+    UI.log "connecting..."
     imap <- IMAP.connectServer imapParams Nothing
-    print "authenticating..."
+    UI.log "authenticating..."
     expectOK state $ IMAP.login imap username password
-    print "opening mailbox..."
+    UI.log "opening mailbox..."
     expectOK state $ IMAP.select imap "\"[Gmail]/All Mail\""
     s <- readIORef state
     print s
