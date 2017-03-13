@@ -21,6 +21,6 @@ doLogin :: GlobalOptions -> Text -> Text -> IO ()
 doLogin globalOptions username password = do
     Posix.setFileMode (unpack (databasePath globalOptions)) 0o600
     db <- Database.open (databasePath globalOptions)
-    Database.setVariable db "username" username
-    Database.setVariable db "password" password
+    Database.setTextVariable db "username" username
+    Database.setTextVariable db "password" password
     Database.commit db

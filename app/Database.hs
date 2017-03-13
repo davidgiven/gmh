@@ -5,6 +5,7 @@ import qualified Text.RawString.QQ as QQ
 import Data.IORef
 import Data.Text
 import qualified Data.Map as Map
+import Text.Read
 
 data Connection =
     Connection {
@@ -41,22 +42,29 @@ commit :: Connection -> IO ()
 commit conn = do
     SQLite.exec (raw conn) "COMMIT; BEGIN;"
 
-setVariable :: Connection -> Text -> Text -> IO ()
-setVariable conn name value = do
+setTextVariable :: Connection -> Text -> Text -> IO ()
+setTextVariable conn name value = do
     stmt <- prepare conn "INSERT OR REPLACE INTO variables (name, value) VALUES (?, ?)"
     SQLite.bindSQLData stmt 1 (SQLite.SQLText name)
     SQLite.bindSQLData stmt 2 (SQLite.SQLText value)
     SQLite.step stmt
     return ()
 
-getVariable :: Connection -> Text -> Text -> IO Text
-getVariable conn name defaultValue = do
+getTextVariable :: Connection -> Text -> Text -> IO Text
+getTextVariable conn name defaultValue = do
     stmt <- prepare conn "SELECT value FROM variables WHERE (name = ?)"
     SQLite.bindSQLData stmt 1 (SQLite.SQLText name)
     result <- SQLite.step stmt
     case result of
         SQLite.Row -> SQLite.columnText stmt 0
         SQLite.Done -> return defaultValue
+
+getVariable :: Show a => Read a => Connection -> Text -> a -> IO a
+getVariable conn name defaultValue = do
+    value <- getTextVariable conn name (pack $ show defaultValue)
+    case (readMaybe $ unpack value) of
+        Just parsed -> return parsed
+        Nothing -> error ("invalid value " ++ (show value))
 
 sqlInitScript :: Text
 sqlInitScript = [QQ.r|

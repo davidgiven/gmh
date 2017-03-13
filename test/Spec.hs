@@ -1,2 +1,8 @@
+import Test.Tasty
+import qualified FlagsTests as FlagsTests
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = defaultMain tests
+
+tests :: TestTree
+tests = testGroup "Tests" [ FlagsTests.tests ]

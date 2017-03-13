@@ -12,10 +12,26 @@ import Network.IMAP.Types (IMAPConnection, IMAPSettings)
 import ListT (ListT)
 import qualified ListT as ListT
 import qualified UI as UI
+import Data.Int
 
-data Options = Options {}
-defaultOptions = Options {}
-optionsDescription = []
+data Options =
+    Options {
+        forceUidRefresh :: Bool
+    } deriving (Show)
+
+defaultOptions :: Options
+defaultOptions =
+    Options {
+        forceUidRefresh = False
+    }
+
+optionsDescription :: [Flags.Flag Options]
+optionsDescription =
+    [
+        Flags.boolFlag ["--force-uid-refresh"] setForceUidRefresh
+    ]
+    where
+        setForceUidRefresh options value = options { forceUidRefresh = value }
 
 data State =
     State {
@@ -26,17 +42,25 @@ data State =
 
 run :: GlobalOptions -> [Text] -> IO ()
 run globalOptions argv = do
-    case argv of
-        [] -> doSync globalOptions
+    print argv
+    print options
+    print rest
+    case rest of
+        [] -> doSync globalOptions options
         _ -> error "syntax: sync"
     where
         (Flags.ParsedFlags options rest) = Flags.parse defaultOptions argv optionsDescription
 
-doSync :: GlobalOptions -> IO ()
-doSync globalOptions = do
+doSync :: GlobalOptions -> Options -> IO ()
+doSync globalOptions options = do
     db <- Database.open (databasePath globalOptions)
     state <- newIORef defaultState
     imap <- connect db state
+    uidsValid <-
+        if (forceUidRefresh options)
+        then return False
+        else checkUidValidity state db imap
+    print uidsValid
     return ()
     where
         defaultState =
@@ -48,8 +72,8 @@ doSync globalOptions = do
 
 connect :: Database.Connection -> IORef State -> IO IMAPConnection
 connect db state = do
-    username <- Database.getVariable db "username" ""
-    password <- Database.getVariable db "password" ""
+    username <- Database.getTextVariable db "username" ""
+    password <- Database.getTextVariable db "password" ""
     if (username == "") || (password == "") then
         error "invalid username and/or password (did you remember to use the login command?)"
     else
@@ -61,12 +85,16 @@ connect db state = do
     expectOK state $ IMAP.login imap username password
     UI.log "opening mailbox..."
     expectOK state $ IMAP.select imap "\"[Gmail]/All Mail\""
-    s <- readIORef state
-    print s
     return imap
     where
         tlsSettings = Connection.TLSSettingsSimple False False False
         imapParams = Connection.ConnectionParams "imap.gmail.com" 993 (Just tlsSettings) Nothing
+
+checkUidValidity :: IORef State -> Database.Connection -> IMAPConnection -> IO Bool
+checkUidValidity state db imap = do
+    oldValidity <- Database.getVariable db "uidvalidity" 0
+    realValidity <- uidValidity <$> readIORef state
+    return (oldValidity == realValidity)
 
 expectOK :: IORef State -> ListT IO IMAP.CommandResult -> IO ()
 expectOK state results = do
