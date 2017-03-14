@@ -38,7 +38,7 @@ data State =
         uidValidity :: Int,
         messageCount :: Int,
         highestModSeq :: Int
-    } deriving (Show)
+    }
 
 run :: GlobalOptions -> [Text] -> IO ()
 run globalOptions argv = do
@@ -54,12 +54,20 @@ run globalOptions argv = do
 doSync :: GlobalOptions -> Options -> IO ()
 doSync globalOptions options = do
     db <- Database.open (databasePath globalOptions)
+    let ?db = db
     state <- newIORef defaultState
-    imap <- connect db state
+    let ?state = state
+    imap <- connect
+    let ?imap = imap
+
     uidsValid <-
         if (forceUidRefresh options)
-        then return False
-        else checkUidValidity state db imap
+            then return False
+            else checkUidValidity
+    if uidsValid
+        then return ()
+        else refreshUids
+
     print uidsValid
     return ()
     where
@@ -70,10 +78,10 @@ doSync globalOptions options = do
                 highestModSeq = 0
             }
 
-connect :: Database.Connection -> IORef State -> IO IMAPConnection
-connect db state = do
-    username <- Database.getTextVariable db "username" ""
-    password <- Database.getTextVariable db "password" ""
+connect :: (?state :: IORef State) => (?db :: Database.Connection) => IO IMAPConnection
+connect = do
+    username <- Database.getTextVariable ?db "username" ""
+    password <- Database.getTextVariable ?db "password" ""
     if (username == "") || (password == "") then
         error "invalid username and/or password (did you remember to use the login command?)"
     else
@@ -82,29 +90,35 @@ connect db state = do
     UI.log "connecting..."
     imap <- IMAP.connectServer imapParams Nothing
     UI.log "authenticating..."
-    expectOK state $ IMAP.login imap username password
+    expectOK $ IMAP.login imap username password
     UI.log "opening mailbox..."
-    expectOK state $ IMAP.select imap "\"[Gmail]/All Mail\""
+    expectOK $ IMAP.select imap "\"[Gmail]/All Mail\""
     return imap
     where
         tlsSettings = Connection.TLSSettingsSimple False False False
         imapParams = Connection.ConnectionParams "imap.gmail.com" 993 (Just tlsSettings) Nothing
 
-checkUidValidity :: IORef State -> Database.Connection -> IMAPConnection -> IO Bool
-checkUidValidity state db imap = do
-    oldValidity <- Database.getVariable db "uidvalidity" 0
-    realValidity <- uidValidity <$> readIORef state
+checkUidValidity :: (?state :: IORef State) => (?db :: Database.Connection) => (?imap :: IMAPConnection) => IO Bool
+checkUidValidity = do
+    oldValidity <- Database.getVariable ?db "uidvalidity" 0
+    realValidity <- uidValidity <$> readIORef ?state
     return (oldValidity == realValidity)
 
-expectOK :: IORef State -> ListT IO IMAP.CommandResult -> IO ()
-expectOK state results = do
-    tagged <- processResponses state results
+refreshUids :: (?state :: IORef State) => (?db :: Database.Connection) => (?imap :: IMAPConnection) => IO ()
+refreshUids = do
+    UI.log "refreshing UIDs..."
+    expectOK $ IMAP.fetchG ?imap "1:* (UID X-GM-MSGID)"
+    Database.commit ?db
+
+expectOK :: (?state :: IORef State) => ListT IO IMAP.CommandResult -> IO ()
+expectOK results = do
+    tagged <- processResponses results
     case IMAP.resultState tagged of
         IMAP.OK -> return ()
         _ -> error ("bad response from IMAP command: " ++ show tagged)
 
-processResponse :: IORef State -> IMAP.UntaggedResult -> IO ()
-processResponse state response =
+processResponse :: (?state :: IORef State) => IMAP.UntaggedResult -> IO ()
+processResponse response =
     case response of
         (IMAP.OKResult _) -> return ()
         (IMAP.Recent _) -> return ()
@@ -113,11 +127,11 @@ processResponse state response =
         (IMAP.PermanentFlags _) -> return ()
 
         (IMAP.Exists newCount) ->
-            modifyIORef' state (\s -> s { messageCount = newCount })
+            modifyIORef' ?state (\s -> s { messageCount = newCount })
         (IMAP.UIDValidity newValidity) ->
-            modifyIORef' state (\s -> s { uidValidity = newValidity })
+            modifyIORef' ?state (\s -> s { uidValidity = newValidity })
         (IMAP.HighestModSeq newModSeq) ->
-            modifyIORef' state (\s -> s { highestModSeq = newModSeq })
+            modifyIORef' ?state (\s -> s { highestModSeq = newModSeq })
 
         (IMAP.Capabilities capabilities) ->
             if (elem (IMAP.CExperimental "X-GM-EXT-1") capabilities)
@@ -127,8 +141,8 @@ processResponse state response =
         response ->
             print ("unknown IMAP response: " ++ show response)
 
-processResponses :: IORef State -> ListT IO IMAP.CommandResult -> IO IMAP.TaggedResult
-processResponses state results =
+processResponses :: (?state :: IORef State) => ListT IO IMAP.CommandResult -> IO IMAP.TaggedResult
+processResponses results =
     ListT.fold iterator defaultResult results
     where
         defaultResult =
@@ -140,7 +154,7 @@ processResponses state results =
 
         iterator :: IMAP.TaggedResult -> IMAP.CommandResult -> IO IMAP.TaggedResult
         iterator old (IMAP.Untagged response) = do
-            processResponse state response
+            processResponse response
             return old
         iterator old (IMAP.Tagged response) = do
             return response

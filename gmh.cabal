@@ -32,7 +32,8 @@ executable gmh-exe
     containers,
     imap,
     connection,
-    list-t
+    list-t,
+    attoparsec
   default-language:
     Haskell2010
   other-modules:
@@ -47,7 +48,8 @@ executable gmh-exe
     OverloadedStrings,
     NamedFieldPuns,
     QuasiQuotes,
-    ScopedTypeVariables
+    ScopedTypeVariables,
+    ImplicitParams
 
 test-suite gmh-test
   type:
@@ -75,7 +77,8 @@ test-suite gmh-test
     OverloadedStrings,
     NamedFieldPuns,
     QuasiQuotes,
-    ScopedTypeVariables
+    ScopedTypeVariables,
+    ImplicitParams
 
 source-repository head
   type:     git
