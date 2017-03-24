@@ -1,0 +1,13 @@
+name: gmh
+version: 0.1.0
+
+authors:
+  - David Given <dg@cowlark.com>
+
+targets:
+  gmh:
+    main: src/gmh.cr
+
+crystal: 0.21.1
+
+license: MIT
