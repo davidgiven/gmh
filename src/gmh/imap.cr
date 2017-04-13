@@ -5,6 +5,7 @@ require "string_scanner"
 class Imap
     @socket : OpenSSL::SSL::Socket
     @tag : Int32 = 0
+    @capabilities = Set(String).new
 
     def initialize(host, port)
         socket = TCPSocket.new(host, port)
@@ -15,13 +16,17 @@ class Imap
         puts next_response
     end
 
+    def capabilities
+        @capabilities
+    end
+
     private def put(line : String)
         puts (">" + line)
         @socket << line
     end
 
     private def get : String
-        line = @socket.gets("\r\n")
+        line = @socket.gets("\r\n", chomp=true)
         if line.nil?
             raise "Socket unexpectedly closed"
         end
@@ -33,9 +38,34 @@ class Imap
         line = get
 
         scanner = ResponseScanner.new(line)
-        scanner.expect_untagged
-        scanner.expect_atom("OK")
-        return OKResponse.new(line, scanner.expect_trailing)
+        tag = scanner.expect_tag
+        atom = scanner.expect_atom
+        case atom
+            when "OK"
+                return OKResponse.new(tag, line, scanner)
+            when "NO"
+                return NOResponse.new(tag, line, scanner)
+            when "CAPABILITY"
+                return CapabilitiesResponse.new(tag, line, scanner)
+            else
+                raise UnmatchedException.new(atom)
+        end
+    end
+
+    private def wait_for_response : Response
+        while true
+            response = next_response
+            break if (response.tag != "*")
+
+            case response
+                when OKResponse
+                    # do nothing
+
+                when CapabilitiesResponse
+                    @capabilities = response.capabilities
+            end
+        end
+        response
     end
 
     private def new_tag : String
@@ -43,20 +73,26 @@ class Imap
         "T" + @tag.to_s
     end
 
-    def login(username : String, password : String)
-        tag = new_tag
-        @socket << tag << " login " << quoted(username) << " " << quoted(password) << "\r\n"
+    private def wait_for_simple_command_response : OKResponse
+        response = wait_for_response
+        if !response.is_a?(OKResponse)
+            raise BadResponseException.new(response)
+        end
+        response
+    end
 
-        response = next_response
-        puts response
+    def login(username : String, password : String)
+        put(String.build do |io|
+            io << new_tag << " login " << quoted(username) << " " << quoted(password) << "\r\n"
+        end)
+        wait_for_simple_command_response
     end
 
     def select(mailbox : String)
-        tag = new_tag
-        @socket << tag << " select " << quoted(mailbox) << "\r\n"
-
-        response = next_response
-        puts response
+        put(String.build do |io|
+            io << new_tag << " select " << quoted(mailbox) << "\r\n"
+        end)
+        wait_for_simple_command_response
     end
 end
 
@@ -64,11 +100,32 @@ private def quoted(s : String)
     '"' + s.gsub(/"/, "\\\"") + '"'
 end
 
-class Response
+class UnmatchedException < Exception
+    def initialize(s)
+        super("cannot match '#{s}...'")
+    end
+end
+
+class BadResponseException < Exception
+    def initialize(r)
+        super("bad response from IMAP server: #{r}")
+    end
+end
+
+abstract class Response
+    @tag : String
     @line : String
 
-    def initialize(line)
+    def initialize(tag, line, scanner)
+        @tag = tag
         @line = line
+        parse(scanner)
+    end
+
+    abstract def parse(scanner)
+
+    def tag
+        @tag
     end
 
     def line
@@ -80,12 +137,11 @@ class Response
     end
 end
 
-class OKResponse < Response
-    @trailing : String
+class TrailingResponse < Response
+    @trailing : String = ""
 
-    def initialize(line, trailing)
-        super(line)
-        @trailing = trailing
+    def parse(scanner)
+        @trailing = scanner.expect_trailing
     end
 
     def trailing
@@ -93,9 +149,23 @@ class OKResponse < Response
     end
 end
 
-class UnmatchedException < Exception
-    def initialise(s)
-        super("cannot match '#{s}...'")
+class OKResponse < TrailingResponse
+end
+
+class NOResponse < TrailingResponse
+end
+
+class CapabilitiesResponse < Response
+    @capabilities = Set(String).new
+
+    def parse(scanner)
+        while !scanner.eos?
+            @capabilities.add(scanner.expect_atom)
+        end
+    end
+
+    def capabilities
+        @capabilities
     end
 end
 
@@ -109,16 +179,17 @@ class ResponseScanner < StringScanner
     end
 
     def expect_ws : Void
-        scan(/ */)
+        expect(/ */)
     end
 
-    def expect_untagged : Void
-        scan(/\*/)
+    def expect_tag : String
+        tag = expect(/\*|[A-Za-z0-9]+/)
         expect_ws
+        tag.as(String)
     end
 
     def expect_atom : String
-        atom = scan(/[A-Z]*/)
+        atom = expect(/[A-Za-z0-9=\\$-]+/)
         expect_ws
         atom.as(String)
     end
