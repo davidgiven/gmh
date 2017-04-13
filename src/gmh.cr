@@ -1,5 +1,7 @@
-require "./gmh/*"
+require "./gmh/imap"
 
-module Gmh
-  # TODO Put your code here
-end
+puts "connecting"
+imap = Imap.new("imap.gmail.com", 993)
+imap.login("david.given@gmail.com", "")
+imap.select("[Gmail]]/All Mail")
+puts "done"

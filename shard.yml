@@ -8,6 +8,10 @@ targets:
   gmh:
     main: src/gmh.cr
 
+dependencies:
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+
 crystal: 0.21.1
 
 license: MIT
