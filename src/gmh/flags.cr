@@ -1,17 +1,15 @@
 require "./globals"
 
-class Flagset
-    @by_name = {} of String => Flag
-    @by_id = {} of String => Flag
+module FlagsParser
+    def parse(argv : Array(String))
+        by_name = {} of String => Flag
 
-    def []=(id : String, flag : Flag)
-        @by_id[id] = flag
-        flag.names.each do |name|
-            @by_name[name] = flag
+        self.all_flags.each do |flag|
+            flag.names.each do |name|
+                by_name[name] = flag
+            end
         end
-    end
 
-    def parse(argv : Array(String)) : ParsedFlags
         i = 0
         while i < argv.size
             arg = argv[i]
@@ -40,7 +38,7 @@ class Flagset
                 break
             end
 
-            flag = @by_name[arg]?
+            flag = by_name[arg]?
             if flag.nil?
                 raise UserException.new("unrecognised flag '%s'" % arg)
             end
@@ -51,28 +49,44 @@ class Flagset
             i += 1
         end
 
-        ParsedFlags.new(@by_id, argv[i..argv.size])
+        self.argv = argv[i..argv.size]
+        self
     end
 end
 
-class ParsedFlags
-    getter flags : Hash(String, Flag)
-    getter rest : Array(String)
+macro define_flags
+    include FlagsParser
 
-    def initialize(flags, rest)
-        @flags = flags
-        @rest = rest
-    end
+    property argv = [] of String
+    getter all_flags = [] of Flag
+end
 
-    def get_string(id)
-        @flags[id].value.as(String)
+macro define_flags(flags)
+    include FlagsParser
+
+    property argv = [] of String
+
+    {% for id, flag in flags %}
+        getter {{ id }}_flag = {{ flag }}
+
+        def {{ id }}
+            @{{ id }}_flag.value
+        end
+    {% end %}
+
+    def all_flags : Array(Flag)
+        flags = [] of Flag
+        {% for id, flag in flags %}
+            flags << {{ id }}_flag
+        {% end %}
+        flags
     end
 end
 
 abstract class Flag
     getter names : Array(String)
     getter help : String
-    getter value : String | Int32
+    property value : String | Int32 | Bool
 
     def initialize(names, help, default)
         @names = names
@@ -88,10 +102,30 @@ class StringFlag < Flag
         @value = right
         true
     end
+
+    def value : String
+        @value.as(String)
+    end
 end
 
 class IntFlag < Flag
     def parse(left, right)
         @value = right.to_i
+        true
+    end
+
+    def value : Int32
+        @value.as(Int32)
+    end
+end
+
+class BoolFlag < Flag
+    def parse(left, right)
+        @value = true
+        false
+    end
+
+    def value : Bool
+        @value.as(Bool)
     end
 end

@@ -1,20 +1,30 @@
 require "./gmh/flags"
 require "./gmh/cmd_login"
+require "./gmh/cmd_sync"
 require "./gmh/globals"
 
-def main
-    flags = Flagset{
-        "database" => StringFlag.new(["-d", "--database"], "Path to mail database", "/home/dg/.gmh.sqlite")
-    }.parse(ARGV)
+class GlobalFlags
+    define_flags ({
+        database: StringFlag.new(
+            ["-d", "--database"],
+            "Path to mail database",
+            "/home/dg/.gmh.sqlite")
+    })
+end
 
-    command = flags.rest[0]?
-    flags.rest.shift
+def main
+    flags = GlobalFlags.new.parse(ARGV)
+
+    command = flags.argv[0]?
+    flags.argv.shift
     case command
         when nil
             raise UserException.new("no command specified (try 'help')")
 
         when "login"
             doLoginCommand(flags)
+        when "sync"
+            doSyncCommand(flags)
 
         else
             raise UserException.new("invalid command '%s' (try 'help')" % command)

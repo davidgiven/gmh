@@ -1,28 +1,34 @@
 require "spec"
 require "../src/gmh/flags"
 
+class TestFlags
+    define_flags ({
+        string: StringFlag.new(["-s", "--string"], "description", ""),
+        int: IntFlag.new(["-i"], "", 0),
+        bool: BoolFlag.new(["-b"], "", true)
+    })
+end
+
 describe "Flags" do
     describe "basic parsing" do
-        flagset = Flagset{
-            "flag" => StringFlag.new(["-s", "--string"], "description", "")
-        }
+        flags = TestFlags.new
 
         describe "flag parameters" do
-            flagset.parse(["-sfoo"])["flag"].should eq "foo"
-            flagset.parse(["-s", "foo"])["flag"].should eq "foo"
-            flagset.parse(["--string=foo"])["flag"].should eq "foo"
-            flagset.parse(["--string", "foo"])["flag"].should eq "foo"
+            flags.parse(["-sfoo"]).string.should eq "foo"
+            flags.parse(["-s", "foo"]).string.should eq "foo"
+            flags.parse(["--string=foo"]).string.should eq "foo"
+            flags.parse(["--string", "foo"]).string.should eq "foo"
         end
 
         describe "rest" do
-            flagset.parse(["-sfoo"]).rest.should eq [] of String
-            flagset.parse(["-sfoo", "baz"]).rest.should eq ["baz"]
-            flagset.parse(["baz", "-sfoo"]).rest.should eq ["baz", "-sfoo"]
+            flags.parse(["-sfoo"]).argv.should eq [] of String
+            flags.parse(["-sfoo", "baz"]).argv.should eq ["baz"]
+            flags.parse(["baz", "-sfoo"]).argv.should eq ["baz", "-sfoo"]
         end
 
         describe "unrecognized" do
             begin
-                flagset.parse(["-z"])
+                flags.parse(["-z"])
                 fail "didn't throw"
             rescue UserException
             end
@@ -30,12 +36,10 @@ describe "Flags" do
     end
 
     describe "flag types" do
-        flagset = Flagset{
-            "string" => StringFlag.new(["-s"], "", ""),
-            "int" => IntFlag.new(["-i"], "", 0)
-        }
+        flags = TestFlags.new
 
-        flagset.parse(["-s42"])["string"].should eq "42"
-        flagset.parse(["-i42"])["int"].should eq 42
+        flags.parse(["-s42"]).string.should eq "42"
+        flags.parse(["-i42"]).int.should eq 42
+        flags.parse(["-b"]).bool.should eq true
     end
 end

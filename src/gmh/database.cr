@@ -9,8 +9,8 @@ class Database
         @db.exec("begin")
     end
 
-    def initialize(flags : ParsedFlags)
-        initialize(flags.get_string("database"))
+    def initialize(flags : GlobalFlags)
+        initialize(flags.database)
     end
 
     def close
