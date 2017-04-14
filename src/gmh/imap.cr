@@ -1,19 +1,25 @@
 require "socket"
 require "openssl"
 require "string_scanner"
+require "./imap_responses"
 
 class Imap
     @socket : OpenSSL::SSL::Socket
     @tag : Int32 = 0
     @capabilities = Set(String).new
+    @response_handler : (Response)->
 
-    def initialize(host, port)
+    def initialize(host, port, response_handler)
         socket = TCPSocket.new(host, port)
         context = OpenSSL::SSL::Context::Client.new
 
         @socket = OpenSSL::SSL::Socket::Client.new(socket, context)
+        @response_handler = response_handler
 
-        puts next_response
+        r = next_response
+        if !r.is_a?(OKResponse)
+            raise BadResponseException.new(r)
+        end
     end
 
     def capabilities
@@ -35,21 +41,7 @@ class Imap
     end
 
     private def next_response : Response
-        line = get
-
-        scanner = ResponseScanner.new(line)
-        tag = scanner.expect_tag
-        atom = scanner.expect_atom
-        case atom
-            when "OK"
-                return OKResponse.new(tag, line, scanner)
-            when "NO"
-                return NOResponse.new(tag, line, scanner)
-            when "CAPABILITY"
-                return CapabilitiesResponse.new(tag, line, scanner)
-            else
-                raise UnmatchedException.new(atom)
-        end
+        Response.parse(get)
     end
 
     private def wait_for_response : Response
@@ -109,99 +101,5 @@ end
 class BadResponseException < Exception
     def initialize(r)
         super("bad response from IMAP server: #{r}")
-    end
-end
-
-abstract class Response
-    @tag : String
-    @line : String
-
-    def initialize(tag, line, scanner)
-        @tag = tag
-        @line = line
-        parse(scanner)
-    end
-
-    abstract def parse(scanner)
-
-    def tag
-        @tag
-    end
-
-    def line
-        @line
-    end
-
-    def to_s(io)
-        io << self.class << "{" << line << "}"
-    end
-end
-
-class TrailingResponse < Response
-    @trailing : String = ""
-
-    def parse(scanner)
-        @trailing = scanner.expect_trailing
-    end
-
-    def trailing
-        @trailing
-    end
-end
-
-class OKResponse < TrailingResponse
-end
-
-class NOResponse < TrailingResponse
-end
-
-class CapabilitiesResponse < Response
-    @capabilities = Set(String).new
-
-    def parse(scanner)
-        while !scanner.eos?
-            @capabilities.add(scanner.expect_atom)
-        end
-    end
-
-    def capabilities
-        @capabilities
-    end
-end
-
-class ResponseScanner < StringScanner
-    def expect(regex)
-        s = scan(regex)
-        if s.nil?
-            raise UnmatchedException.new(self.peek(20))
-        end
-        s
-    end
-
-    def expect_ws : Void
-        expect(/ */)
-    end
-
-    def expect_tag : String
-        tag = expect(/\*|[A-Za-z0-9]+/)
-        expect_ws
-        tag.as(String)
-    end
-
-    def expect_atom : String
-        atom = expect(/[A-Za-z0-9=\\$-]+/)
-        expect_ws
-        atom.as(String)
-    end
-
-    def expect_atom(want) : Void
-        got = expect_atom
-        if (got != want)
-            raise UnmatchedException.new(got)
-        end
-    end
-
-    def expect_trailing : String
-        scan(/.*/).as(String)
     end
 end
