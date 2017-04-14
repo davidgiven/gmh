@@ -1,4 +1,4 @@
-class ResponseScanner < StringScanner
+class ImapResponseScanner < StringScanner
     def expect(regex)
         s = scan(regex)
         if s.nil?

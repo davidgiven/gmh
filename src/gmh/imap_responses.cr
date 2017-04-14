@@ -1,8 +1,8 @@
 require "./imap_scanner"
 
-private module ResponseParser
-    def parse(line : String) : Response
-        scanner = ResponseScanner.new(line)
+private module ImapResponseParser
+    def parse(line : String) : ImapResponse
+        scanner = ImapResponseScanner.new(line)
         tag = scanner.expect_tag
         atom = scanner.expect_atom
         case atom
@@ -18,8 +18,8 @@ private module ResponseParser
     end
 end
 
-abstract class Response
-    extend ResponseParser
+abstract class ImapResponse
+    extend ImapResponseParser
 
     getter tag : String
     getter line : String
@@ -37,7 +37,7 @@ abstract class Response
     end
 end
 
-class TrailingResponse < Response
+class TrailingResponse < ImapResponse
     getter trailing : String = ""
 
     def parse(scanner)
@@ -51,7 +51,7 @@ end
 class NOResponse < TrailingResponse
 end
 
-class CapabilitiesResponse < Response
+class CapabilitiesResponse < ImapResponse
     getter capabilities = Set(String).new
 
     def parse(scanner)

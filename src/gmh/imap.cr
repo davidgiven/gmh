@@ -6,10 +6,9 @@ require "./imap_responses"
 class Imap
     @socket : OpenSSL::SSL::Socket
     @tag : Int32 = 0
-    @capabilities = Set(String).new
-    @response_handler : (Response)->
+    @response_handler : (ImapResponse)->
 
-    def initialize(host, port, response_handler)
+    def initialize(host, port, &response_handler : ImapResponse->Void)
         socket = TCPSocket.new(host, port)
         context = OpenSSL::SSL::Context::Client.new
 
@@ -20,10 +19,6 @@ class Imap
         if !r.is_a?(OKResponse)
             raise BadResponseException.new(r)
         end
-    end
-
-    def capabilities
-        @capabilities
     end
 
     private def put(line : String)
@@ -40,22 +35,16 @@ class Imap
         line
     end
 
-    private def next_response : Response
-        Response.parse(get)
+    private def next_response : ImapResponse
+        ImapResponse.parse(get)
     end
 
-    private def wait_for_response : Response
+    private def wait_for_response : ImapResponse
         while true
             response = next_response
             break if (response.tag != "*")
 
-            case response
-                when OKResponse
-                    # do nothing
-
-                when CapabilitiesResponse
-                    @capabilities = response.capabilities
-            end
+            @response_handler.call(response)
         end
         response
     end
