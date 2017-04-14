@@ -1,3 +1,5 @@
+require "./globals"
+
 class Flagset
     @by_name = {} of String => Flag
     @by_id = {} of String => Flag
@@ -38,7 +40,10 @@ class Flagset
                 break
             end
 
-            flag = @by_name[arg]
+            flag = @by_name[arg]?
+            if flag.nil?
+                raise UserException.new("unrecognised flag '%s'" % arg)
+            end
             if flag.parse(arg, opt) && !combined
                 i += 1
             end
@@ -59,8 +64,8 @@ class ParsedFlags
         @rest = rest
     end
 
-    def [](id)
-        @flags[id].value
+    def get_string(id)
+        @flags[id].value.as(String)
     end
 end
 

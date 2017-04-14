@@ -1,22 +1,41 @@
-require "./gmh/imap"
-require "./gmh/database"
 require "./gmh/flags"
+require "./gmh/cmd_login"
+require "./gmh/globals"
 
-globalFlagDescription = Flagset{
-    "database" => Flags::StringFlag.new(["-d", "--database"], "Path to mail database", "/home/dg/.gmh.sqlite")
-}
+def main
+    flags = Flagset{
+        "database" => StringFlag.new(["-d", "--database"], "Path to mail database", "/home/dg/.gmh.sqlite")
+    }.parse(ARGV)
 
-globalOptions = parseFlags(globalFlagDescription, ARGV)
+    command = flags.rest[0]?
+    flags.rest.shift
+    case command
+        when nil
+            raise UserException.new("no command specified (try 'help')")
 
-puts "connecting"
-db = Database.new("/home/dg/.gmh.sqlite")
-imap = Imap.new("imap.gmail.com", 993, ->(r : Response){})
-imap.login(db.get_var("username"), db.get_var("password"))
+        when "login"
+            doLoginCommand(flags)
 
-if !imap.capabilities.includes?("X-GM-EXT-1")
-    puts "This isn't a Gmail server!"
-    exit 0
+        else
+            raise UserException.new("invalid command '%s' (try 'help')" % command)
+    end
+
+#    puts "connecting"
+#    db = Database.new("/home/dg/.gmh.sqlite")
+#    imap = Imap.new("imap.gmail.com", 993, ->(r : Response){})
+#    imap.login(db.get_var("username"), db.get_var("password"))
+#
+#    if !imap.capabilities.includes?("X-GM-EXT-1")
+#        puts "This isn't a Gmail server!"
+#        exit 0
+#    end
+#
+#    imap.select("[Gmail]/All Mail")
+#    puts "done"
 end
 
-imap.select("[Gmail]/All Mail")
-puts "done"
+begin
+    main
+rescue e : UserException
+    puts "error: %s" % e.message
+end

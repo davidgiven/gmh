@@ -6,6 +6,20 @@ class Database
 
     def initialize(filename : String)
         @db = DB.open("sqlite3://" + filename)
+        @db.exec("begin")
+    end
+
+    def initialize(flags : ParsedFlags)
+        initialize(flags.get_string("database"))
+    end
+
+    def close
+        @db.close
+    end
+
+    def commit
+        @db.exec("commit")
+        @db.exec("begin")
     end
 
     def get_var(name : String, default : String = "") : String
@@ -15,5 +29,9 @@ class Database
         else
             s.as(String)
         end
+    end
+
+    def set_var(name : String, value : String) : Void
+        @db.exec("INSERT OR REPLACE INTO variables (name, value) VALUES (?, ?)", name, value)
     end
 end

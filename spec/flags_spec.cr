@@ -19,6 +19,14 @@ describe "Flags" do
             flagset.parse(["-sfoo", "baz"]).rest.should eq ["baz"]
             flagset.parse(["baz", "-sfoo"]).rest.should eq ["baz", "-sfoo"]
         end
+
+        describe "unrecognized" do
+            begin
+                flagset.parse(["-z"])
+                fail "didn't throw"
+            rescue UserException
+            end
+        end
     end
 
     describe "flag types" do
