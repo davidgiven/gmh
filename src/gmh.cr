@@ -1,5 +1,12 @@
 require "./gmh/imap"
 require "./gmh/database"
+require "./gmh/flags"
+
+globalFlagDescription = Flagset{
+    "database" => Flags::StringFlag.new(["-d", "--database"], "Path to mail database", "/home/dg/.gmh.sqlite")
+}
+
+globalOptions = parseFlags(globalFlagDescription, ARGV)
 
 puts "connecting"
 db = Database.new("/home/dg/.gmh.sqlite")

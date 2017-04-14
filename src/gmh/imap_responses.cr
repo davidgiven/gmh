@@ -21,8 +21,8 @@ end
 abstract class Response
     extend ResponseParser
 
-    @tag : String
-    @line : String
+    getter tag : String
+    getter line : String
 
     def initialize(tag, line, scanner)
         @tag = tag
@@ -32,28 +32,16 @@ abstract class Response
 
     abstract def parse(scanner)
 
-    def tag
-        @tag
-    end
-
-    def line
-        @line
-    end
-
     def to_s(io)
         io << self.class << "{" << line << "}"
     end
 end
 
 class TrailingResponse < Response
-    @trailing : String = ""
+    getter trailing : String = ""
 
     def parse(scanner)
         @trailing = scanner.expect_trailing
-    end
-
-    def trailing
-        @trailing
     end
 end
 
@@ -64,16 +52,12 @@ class NOResponse < TrailingResponse
 end
 
 class CapabilitiesResponse < Response
-    @capabilities = Set(String).new
+    getter capabilities = Set(String).new
 
     def parse(scanner)
         while !scanner.eos?
             @capabilities.add(scanner.expect_atom)
         end
-    end
-
-    def capabilities
-        @capabilities
     end
 end
 
