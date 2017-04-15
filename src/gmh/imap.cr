@@ -62,18 +62,17 @@ class Imap
         response
     end
 
-    def login(username : String, password : String)
-        put(String.build do |io|
-            io << new_tag << " login " << quoted(username) << " " << quoted(password) << "\r\n"
-        end)
+    def command(command : String)
+        put("#{new_tag} #{command}\r\n")
         wait_for_simple_command_response
     end
 
+    def login(username : String, password : String)
+        command("login #{quoted(username)} #{quoted(password)}")
+    end
+
     def select(mailbox : String)
-        put(String.build do |io|
-            io << new_tag << " select " << quoted(mailbox) << "\r\n"
-        end)
-        wait_for_simple_command_response
+        command("select #{quoted(mailbox)}")
     end
 end
 

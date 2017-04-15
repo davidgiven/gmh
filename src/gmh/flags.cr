@@ -19,9 +19,9 @@ module FlagsParser
             end
 
             combined = false
-            if /^--\w+$/.match(arg)
+            if /^--[-\w]+$/.match(arg)
                 # --foo arg
-            elsif match = /^(--\w+)=(.*)$/.match(arg)
+            elsif match = /^(--[-\w]+)=(.*)$/.match(arg)
                 # --foo=arg
                 arg = match[1]
                 opt = match[2]
@@ -33,6 +33,8 @@ module FlagsParser
                 arg = match[1]
                 opt = match[2]
                 combined = true
+            elsif /^-/.match(arg)
+                # malformed arg
             else
                 # not an arg
                 break

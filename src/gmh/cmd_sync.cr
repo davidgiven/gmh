@@ -15,19 +15,62 @@ class SyncFlags
     })
 end
 
+class MessageSkeleton
+    getter gmail_id : Int64?
+    getter uid : Int64?
+
+    private def to_i64(s : String?) : Int64?
+        if s.nil?
+            nil
+        else
+            s.to_i64
+        end
+    end
+
+    def initialize(msg : FetchResponse)
+        @gmail_id = to_i64(msg.attr["X-GM-MSGID"].as(String?))
+        @uid = to_i64(msg.attr["UID"].as(String?))
+    end
+
+    def write_to(db : Database)
+        if @gmail_id.nil?
+            return
+        end
+
+        db.add_message(@gmail_id.as(Int64))
+        if !@uid.nil?
+            db.set_message_uid(@gmail_id.as(Int64), @uid.as(Int64))
+        end
+    end
+end
+
 def doSyncCommand(globalFlags : GlobalFlags)
     flags = SyncFlags.new.parse(globalFlags.argv)
+    puts globalFlags.argv
     if flags.argv.size != 0
         raise UserException.new("syntax: sync [<flags>...]")
     end
 
-    capabilities = Set(String).new
-
     db = Database.new(globalFlags)
+
+    capabilities = Set(String).new
+    uid_validity = 0_i64
+    highest_modseq = 0_i64
+    old_uid_validity = db.get_var("uidvalidity", "0").to_i64
+    old_highest_modseq = db.get_var("modseq", "0").to_i64
+
     imap = Imap.new("imap.gmail.com", 993) do |response|
         case response
             when CapabilitiesResponse
                 capabilities = response.capabilities
+            when UidValidityOKResponse
+                uid_validity = response.value
+            when HighestModSeqOKResponse
+                highest_modseq = response.value
+            when FlagsResponse
+                # ignore silently
+            when FetchResponse
+                MessageSkeleton.new(response).write_to(db)
             else
                 puts "unknown response, ignoring"
         end
@@ -35,4 +78,13 @@ def doSyncCommand(globalFlags : GlobalFlags)
 
     imap.login(db.get_var("username"), db.get_var("password"))
     imap.select("[Gmail]/All Mail")
+
+    if flags.force_uid_refresh || (uid_validity != old_uid_validity)
+        puts("refreshing UID map")
+        imap.command("FETCH 1:* (UID X-GM-MSGID)")
+        db.set_var("uidvalidity", uid_validity.to_s)
+        db.commit
+    end
+
+    puts("fetching updates from #{old_highest_modseq} to #{highest_modseq}...")
 end

@@ -1,4 +1,5 @@
 require "./gmh/flags"
+require "./gmh/cmd_init"
 require "./gmh/cmd_login"
 require "./gmh/cmd_sync"
 require "./gmh/globals"
@@ -21,6 +22,8 @@ def main
         when nil
             raise UserException.new("no command specified (try 'help')")
 
+        when "init"
+            doInitCommand(flags)
         when "login"
             doLoginCommand(flags)
         when "sync"
