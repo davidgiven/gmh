@@ -33,10 +33,9 @@ private module ImapResponseParser
             when "FLAGS"
                 return FlagsResponse.new(tag, line, scanner)
             else
-                try_parsing FetchResponse.new(tag, line, scanner)
                 try_parsing ExistsResponse.new(tag, line, scanner, atom)
                 try_parsing RecentResponse.new(tag, line, scanner, atom)
-                raise UnmatchedException.new(atom)
+                FetchResponse.new(tag, line, scanner)
         end
     end
 end
@@ -189,12 +188,18 @@ end
 class FetchResponse < ImapResponse
     getter attr = Hash(String, ImapElement).new
     getter flags = Set(String).new
+    getter body : String?
 
     def parse(scanner)
         scanner.expect_atom("FETCH")
         scanner.expect_open_paren
         while !scanner.at_close_paren
             key = scanner.expect_atom
+            if scanner.at_open_sq_bracket
+                scanner.expect_open_sq_bracket
+                scanner.expect_close_sq_bracket
+                key = key + "[]"
+            end
             value = scanner.expect_element
             attr[key] = value
         end
@@ -202,3 +207,76 @@ class FetchResponse < ImapResponse
         scanner.expect_eol
     end
 end
+
+class ImapEmail
+    getter realname : String
+    getter email : String
+
+    def initialize(imap : Array(ImapElement))
+        @realname = imap[0].as(String)
+        @email = imap[2].as(String) + "@" + imap[3].as(String)
+
+        if @realname == "NIL"
+            @realname = @email
+        end
+    end
+
+    def to_s(io)
+        if @realname == @email
+            io << @email
+        else
+            io << @realname << " <" << @email << ">"
+        end
+    end
+end
+
+class ImapEnvelope
+    @@time_format = Time::Format.new("%a, %e %b %Y %T %z")
+
+    getter received : Time?
+    getter subject = ""
+    getter from : ImapEmail?
+    getter sender : ImapEmail?
+    getter reply_to = Set(ImapEmail).new
+    getter to = Set(ImapEmail).new
+    getter cc = Set(ImapEmail).new
+    getter bcc = Set(ImapEmail).new
+    getter in_reply_to : String?
+
+    private def imap_to_time(imap : ImapElement) : Time?
+        s = imap.as(String)
+        if s == "NIL"
+            nil
+        else
+            @@time_format.parse(s)
+        end
+    end
+
+    private def imap_to_emails(imap : ImapElement) : Set(ImapEmail)
+        s = Set(ImapEmail).new
+        if imap != "NIL"
+            imap.as(Array(ImapElement)).each do |email|
+                s << ImapEmail.new(email.as(Array(ImapElement)))
+            end
+        end
+        s
+    end
+
+    private def single_email(emails : Set(ImapEmail)) : ImapEmail?
+        emails.each do |email|
+            return email
+        end
+        nil
+    end
+
+    def initialize(imap : Array(ImapElement))
+        @received = imap_to_time(imap[0])
+        @subject = imap[1].as(String)
+        if @subject == "NIL"
+            @subject = ""
+        end
+        @from = single_email(imap_to_emails(imap[2]))
+        @sender = single_email(imap_to_emails(imap[3]))
+    end
+end
+

@@ -2,6 +2,7 @@ require "socket"
 require "openssl"
 require "string_scanner"
 require "./imap_responses"
+require "./globals"
 
 class Imap
     @socket : OpenSSL::SSL::Socket
@@ -29,14 +30,31 @@ class Imap
     end
 
     private def get : String
-        line = @socket.gets("\r\n", chomp=true)
-        if line.nil?
-            raise "Socket unexpectedly closed"
+        sb = String::Builder.new
+        line = "{0}"
+
+        while true
+            m = /\{([0-9]+)\}$/.match(line)
+            if !m
+                break
+            end
+
+            slice = Slice(UInt8).new(m[1].to_i)
+            @socket.read_fully(slice)
+            sb << String.new(slice, "ISO-8859-1")
+
+            line = @socket.gets("\r\n", chomp=true)
+            if line.nil?
+                raise "Socket unexpectedly closed"
+            end
+            sb << line
         end
+
+        s = sb.to_s
         if @flags.trace_imap
-            puts ("<" + line)
+            puts s
         end
-        line
+        s
     end
 
     private def next_response : ImapResponse

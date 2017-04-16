@@ -33,7 +33,7 @@ class ImapResponseScanner < StringScanner
     end
 
     def expect_atom : String
-        atom = expect(/[^(){ %"\]]+/)
+        atom = expect(/[^(){ %"[\]]+/)
         expect_ws
         atom.as(String)
     end
@@ -55,23 +55,31 @@ class ImapResponseScanner < StringScanner
     end
 
     def expect_string : String
-        if !scan(/"/)
+        if scan(/"/)
+            s = String::Builder.new
+            while true
+                if c = scan(/\\(["\\])/)
+                    s << c[1]
+                elsif scan(/"/)
+                    break
+                else
+                    s << scan(/./)
+                end
+            end
+            expect_ws
+
+            s.to_s
+        else
             raise UnmatchedException.new(peek(20))
         end
+    end
 
-        s = String::Builder.new
-        while true
-            if c = scan(/\\"/)
-                s << '"'
-            elsif scan(/"/)
-                break
-            else
-                s << scan(/./)
-            end
-        end
-        expect_ws
-
-        s.to_s
+    def expect_raw_string : String
+        self.expect(/\{([0-9]+)}/)
+        bytes = self[1].to_i
+        s = self.peek(bytes)
+        self.offset = self.offset + bytes
+        s
     end
 
     def expect_trailing : String
@@ -79,18 +87,24 @@ class ImapResponseScanner < StringScanner
     end
 
     def expect_element : ImapElement
-        if at_open_paren
-            list = [] of ImapElement
-            expect_open_paren
-            while !at_close_paren
-                list << expect_element
-            end
-            expect_close_paren
-            list
-        elsif self.peek(1) == "\""
-            expect_string
-        else
-            expect_atom
+        case self.peek(1)
+            when "("
+                list = [] of ImapElement
+                expect_open_paren
+                while !at_close_paren
+                    list << expect_element
+                end
+                expect_close_paren
+                list
+
+            when "\""
+                expect_string
+
+            when "{"
+                expect_raw_string
+
+            else
+                expect_atom
         end
     end
 

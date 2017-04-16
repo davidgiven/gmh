@@ -81,14 +81,14 @@ class ProgressBar
     end
 
     def set_progress(progress : Int32)
-        @count = progress
+        @count = progress.clamp(0, @max)
         @now = time_in_ms
         if (@now - @last_update_time) > 200
             update
         end
     end
 
-    def next
-        set_progress(@count + 1)
+    def next(inc = 1)
+        set_progress(@count + inc)
     end
 end

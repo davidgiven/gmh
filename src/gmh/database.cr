@@ -67,4 +67,22 @@ class Database
                 gmail_id, label)
         end
     end
+
+    def get_non_downloaded_uids(max : Int32) : Set(Int64)
+        uids = Set(Int64).new
+        @db.query(
+            <<-SQL
+                SELECT uid FROM messages WHERE
+                    downloaded = 0 AND uid IS NOT NULL
+                    ORDER BY date DESC
+                    LIMIT ?
+            SQL, max
+        ) do |rs|
+            uids = Set(Int64).new
+            rs.each do
+                uids << rs.read.as(Int64)
+            end
+            return uids
+        end
+    end
 end

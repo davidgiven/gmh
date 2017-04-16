@@ -18,6 +18,7 @@ end
 
 class MessageSkeleton
     @gmail_id : Int64?
+    @thread_id : Int64?
     @uid : Int64?
     @flags : Set(String)?
     @labels : Set(String)?
@@ -44,6 +45,7 @@ class MessageSkeleton
 
     def initialize(msg : FetchResponse)
         @gmail_id = to_i64(msg.attr["X-GM-MSGID"].as(String?))
+        @thread_id = to_i64(msg.attr["X-GM-THRID"].as(String?))
         @uid = to_i64(msg.attr["UID"].as(String?))
         @flags = to_set(msg.attr["FLAGS"].as(Array(ImapElement)?))
         @labels = to_set(msg.attr["X-GM-LABELS"].as(Array(ImapElement)?))
@@ -122,4 +124,37 @@ def doSyncCommand(globalFlags : GlobalFlags)
     imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-LABELS FLAGS) (CHANGEDSINCE #{old_highest_modseq})", &handler)
     db.set_var("modseq", highest_modseq.to_s)
     db.commit
+
+    puts("fetching message bodies (this bit is ^C-able)")
+    non_downloaded_uids_count = db.get_non_downloaded_uids(Int32::MAX).size
+    ProgressBar.count(non_downloaded_uids_count) do |pb|
+        while true
+            uid_batch = db.get_non_downloaded_uids(flags.batch_size)
+            if uid_batch.size == 0
+                break
+            end
+
+            cmd = String::Builder.new
+            cmd << "FETCH "
+            first = true
+            uid_batch.each do |uid|
+                if !first
+                    cmd << ','
+                end
+                first = false
+                cmd << uid
+            end
+
+            cmd << " (X-GM-MSGID X-GM-THRID ENVELOPE BODY.PEEK[])"
+            imap.command(cmd.to_s) do |r|
+                handler.call(r)
+                if r.is_a?(FetchResponse)
+                    pb.next
+                end
+            end
+
+            db.commit
+        end
+    end
+    puts non_downloaded_uids_count
 end
