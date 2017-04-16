@@ -6,16 +6,14 @@ require "./imap_responses"
 class Imap
     @socket : OpenSSL::SSL::Socket
     @flags : GlobalFlags
-    @response_handler : (ImapResponse)->
     @tag : Int32 = 0
 
-    def initialize(host, port, flags : GlobalFlags, &response_handler : ImapResponse->Void)
+    def initialize(host, port, flags : GlobalFlags)
         socket = TCPSocket.new(host, port)
         context = OpenSSL::SSL::Context::Client.new
 
         @socket = OpenSSL::SSL::Socket::Client.new(socket, context)
         @flags = flags
-        @response_handler = response_handler
 
         r = next_response
         if !r.is_a?(OKResponse)
@@ -45,40 +43,33 @@ class Imap
         ImapResponse.parse(get)
     end
 
-    private def wait_for_response : ImapResponse
-        while true
-            response = next_response
-            break if (response.tag != "*")
-
-            @response_handler.call(response)
-        end
-        response
-    end
-
     private def new_tag : String
         @tag = @tag + 1
         "T" + @tag.to_s
     end
 
-    private def wait_for_simple_command_response : OKResponse
-        response = wait_for_response
+    def command(command : String, &block : ImapResponse->Void)
+        put("#{new_tag} #{command}\r\n")
+
+        while true
+            response = next_response
+            break if (response.tag != "*")
+
+            yield response
+        end
+
         if !response.is_a?(OKResponse)
             raise BadResponseException.new(response)
         end
         response
     end
 
-    def command(command : String)
-        put("#{new_tag} #{command}\r\n")
-        wait_for_simple_command_response
+    def login(username : String, password : String, &block : ImapResponse->Void)
+        command("login #{quoted(username)} #{quoted(password)}", &block)
     end
 
-    def login(username : String, password : String)
-        command("login #{quoted(username)} #{quoted(password)}")
-    end
-
-    def select(mailbox : String)
-        command("select #{quoted(mailbox)}")
+    def select(mailbox : String, &block : ImapResponse->Void)
+        command("select #{quoted(mailbox)}", &block)
     end
 end
 

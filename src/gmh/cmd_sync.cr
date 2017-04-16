@@ -1,6 +1,7 @@
 require "./database"
 require "./imap"
 require "./flags"
+require "./progress"
 
 class SyncFlags
     define_flags({
@@ -77,10 +78,13 @@ def doSyncCommand(globalFlags : GlobalFlags)
     capabilities = Set(String).new
     uid_validity = 0_i64
     highest_modseq = 0_i64
+    approximate_message_count = 0_i64
     old_uid_validity = db.get_var("uidvalidity", "0").to_i64
     old_highest_modseq = db.get_var("modseq", "0").to_i64
 
-    imap = Imap.new("imap.gmail.com", 993, globalFlags) do |response|
+    imap = Imap.new("imap.gmail.com", 993, globalFlags)
+
+    handler = ->(response : ImapResponse) {
         case response
             when CapabilitiesResponse
                 capabilities = response.capabilities
@@ -88,27 +92,34 @@ def doSyncCommand(globalFlags : GlobalFlags)
                 uid_validity = response.value
             when HighestModSeqOKResponse
                 highest_modseq = response.value
-            when FlagsResponse
+            when ExistsResponse
+                approximate_message_count = response.value
+            when FlagsResponse | PermanentFlagsOKResponse | RecentResponse
                 # ignore silently
             when FetchResponse
                 MessageSkeleton.new(response).write_to(db)
             else
                 puts "unknown response #{response}, ignoring"
         end
-    end
+    }
 
-    imap.login(db.get_var("username"), db.get_var("password"))
-    imap.select("[Gmail]/All Mail")
+    imap.login(db.get_var("username"), db.get_var("password"), &handler)
+    imap.select("[Gmail]/All Mail", &handler)
 
     if flags.force_uid_refresh || (uid_validity != old_uid_validity)
         puts("refreshing UID map")
-        imap.command("FETCH 1:* (UID X-GM-MSGID)")
+        ProgressBar.count(approximate_message_count.to_i32) do |pb|
+            imap.command("FETCH 1:* (UID X-GM-MSGID)") do |r|
+                pb.next
+                handler.call(r)
+            end
+        end
         db.set_var("uidvalidity", uid_validity.to_s)
         db.commit
     end
 
     puts("fetching message updates from #{old_highest_modseq} to #{highest_modseq}")
-    imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-LABELS FLAGS) (CHANGEDSINCE #{old_highest_modseq})")
+    imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-LABELS FLAGS) (CHANGEDSINCE #{old_highest_modseq})", &handler)
     db.set_var("modseq", highest_modseq.to_s)
     db.commit
 end
