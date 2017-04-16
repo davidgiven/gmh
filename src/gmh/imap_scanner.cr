@@ -1,5 +1,11 @@
 alias ImapElement = String | Array(ImapElement)
 
+class UnmatchedException < Exception
+    def initialize(s)
+        super("cannot match '#{s}...'")
+    end
+end
+
 class ImapResponseScanner < StringScanner
 
     def expect(regex)
@@ -27,9 +33,18 @@ class ImapResponseScanner < StringScanner
     end
 
     def expect_atom : String
-        atom = expect(/[A-Za-z0-9=\\$*-]+/)
+        atom = expect(/[^(){ %"\]]+/)
         expect_ws
         atom.as(String)
+    end
+
+    def at_atom(want) : Bool
+        begin
+            expect_atom(want)
+            true
+        rescue UnmatchedException
+            false
+        end
     end
 
     def expect_atom(want) : Void
@@ -37,6 +52,26 @@ class ImapResponseScanner < StringScanner
         if (got != want)
             raise UnmatchedException.new(got)
         end
+    end
+
+    def expect_string : String
+        if !scan(/"/)
+            raise UnmatchedException.new(peek(20))
+        end
+
+        s = String::Builder.new
+        while true
+            if c = scan(/\\"/)
+                s << '"'
+            elsif scan(/"/)
+                break
+            else
+                s << scan(/./)
+            end
+        end
+        expect_ws
+
+        s.to_s
     end
 
     def expect_trailing : String
@@ -52,6 +87,8 @@ class ImapResponseScanner < StringScanner
             end
             expect_close_paren
             list
+        elsif self.peek(1) == "\""
+            expect_string
         else
             expect_atom
         end

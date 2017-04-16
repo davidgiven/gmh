@@ -1,3 +1,4 @@
+require "string_scanner"
 require "./imap_scanner"
 
 private macro try_parsing(expr)
@@ -186,7 +187,8 @@ class RecentResponse < NumericResponse
 end
 
 class FetchResponse < ImapResponse
-    getter attr = {} of String => ImapElement
+    getter attr = Hash(String, ImapElement).new
+    getter flags = Set(String).new
 
     def parse(scanner)
         scanner.expect_atom("FETCH")

@@ -5,14 +5,16 @@ require "./imap_responses"
 
 class Imap
     @socket : OpenSSL::SSL::Socket
-    @tag : Int32 = 0
+    @flags : GlobalFlags
     @response_handler : (ImapResponse)->
+    @tag : Int32 = 0
 
-    def initialize(host, port, &response_handler : ImapResponse->Void)
+    def initialize(host, port, flags : GlobalFlags, &response_handler : ImapResponse->Void)
         socket = TCPSocket.new(host, port)
         context = OpenSSL::SSL::Context::Client.new
 
         @socket = OpenSSL::SSL::Socket::Client.new(socket, context)
+        @flags = flags
         @response_handler = response_handler
 
         r = next_response
@@ -22,7 +24,9 @@ class Imap
     end
 
     private def put(line : String)
-        puts (">" + line)
+        if @flags.trace_imap
+            puts (">" + line)
+        end
         @socket << line
     end
 
@@ -31,7 +35,9 @@ class Imap
         if line.nil?
             raise "Socket unexpectedly closed"
         end
-        puts ("<" + line)
+        if @flags.trace_imap
+            puts ("<" + line)
+        end
         line
     end
 
@@ -78,12 +84,6 @@ end
 
 private def quoted(s : String)
     '"' + s.gsub(/"/, "\\\"") + '"'
-end
-
-class UnmatchedException < Exception
-    def initialize(s)
-        super("cannot match '#{s}...'")
-    end
 end
 
 class BadResponseException < Exception

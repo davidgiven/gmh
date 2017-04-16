@@ -9,7 +9,11 @@ class GlobalFlags
         database: StringFlag.new(
             ["-d", "--database"],
             "Path to mail database",
-            "/home/dg/.gmh.sqlite")
+            "/home/dg/.gmh.sqlite"),
+        trace_imap: BoolFlag.new(
+            ["--trace-imap"],
+            "Dump all IMAP requests/responses to stdout (warning: very spammy)",
+            false)
     })
 end
 

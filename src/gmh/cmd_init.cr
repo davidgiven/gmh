@@ -21,19 +21,6 @@ def doInitCommand(globalFlags : GlobalFlags)
     SQL)
 
     db.exec(<<-SQL
-        CREATE TABLE IF NOT EXISTS messages (
-            gmailId INTEGER PRIMARY KEY,
-            threadId INTEGER,
-            uid INTEGER,
-            flags TEXT,
-            date INTEGER,
-            headers TEXT,
-            messageId TEXT,
-            downloaded INTEGER DEFAULT 0
-        )
-    SQL)
-
-    db.exec(<<-SQL
         CREATE TABLE IF NOT EXISTS variables (
             name TEXT PRIMARY KEY,
             value TEXT
@@ -52,6 +39,18 @@ def doInitCommand(globalFlags : GlobalFlags)
             downloaded INTEGER DEFAULT 0
         )
     SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS messages_by_uid ON messages (uid)
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS messages_by_threadId ON messages (uid)
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS messages_by_downloaded ON messages (downloaded)
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS messages_by_date ON messages (date)
+    SQL)
 
     db.exec(<<-SQL
         CREATE VIRTUAL TABLE IF NOT EXISTS messageData USING FTS4(
@@ -61,28 +60,11 @@ def doInitCommand(globalFlags : GlobalFlags)
     SQL)
 
     db.exec(<<-SQL
-        CREATE INDEX IF NOT EXISTS messages_by_uid ON messages (uid)
-    SQL)
-
-    db.exec(<<-SQL
-        CREATE INDEX IF NOT EXISTS messages_by_threadId ON messages (uid)
-    SQL)
-
-    db.exec(<<-SQL
-        CREATE INDEX IF NOT EXISTS messages_by_downloaded ON messages (downloaded)
-    SQL)
-
-    db.exec(<<-SQL
-        CREATE INDEX IF NOT EXISTS messages_by_date ON messages (date)
-    SQL)
-
-    db.exec(<<-SQL
         CREATE TABLE IF NOT EXISTS labels (
             labelId INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )
     SQL)
-
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS labels_by_name ON labels (name)
     SQL)
@@ -95,13 +77,36 @@ def doInitCommand(globalFlags : GlobalFlags)
             FOREIGN KEY (labelId) REFERENCES labels(labelId) ON DELETE CASCADE
         )
     SQL)
-
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS labelMap_by_msg ON labelMap (gmailId)
     SQL)
-
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS labelMap_by_label ON labelMap (labelId)
+    SQL)
+
+    db.exec(<<-SQL
+        CREATE TABLE IF NOT EXISTS flags (
+            flagId INTEGER PRIMARY KEY,
+            name TEXT UNIQUE
+        )
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS flags_by_name ON flags (name)
+    SQL)
+
+    db.exec(<<-SQL
+        CREATE TABLE IF NOT EXISTS flagMap (
+            gmailId INTEGER,
+            flagId INTEGER,
+            FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE,
+            FOREIGN KEY (flagId) REFERENCES flags(flagId) ON DELETE CASCADE
+        )
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS flagMap_by_msg ON flagMap (gmailId)
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS flagMap_by_label ON flagMap (flagId)
     SQL)
 
     db.exec(<<-SQL
@@ -111,7 +116,6 @@ def doInitCommand(globalFlags : GlobalFlags)
             name TEXT
         )
     SQL)
-
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS addresses_by_email ON addresses (email)
     SQL)
@@ -125,11 +129,9 @@ def doInitCommand(globalFlags : GlobalFlags)
             FOREIGN KEY (addressId) REFERENCES addresses(addressId) ON DELETE CASCADE
         )
     SQL)
-
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS addressMap_by_gmailId ON addressMap (gmailId)
     SQL)
-
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS addressMap_by_addressId ON addressMap (addressId)
     SQL)

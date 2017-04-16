@@ -47,4 +47,24 @@ class Database
     def set_message_uid(gmail_id : Int64, uid : Int64) : Void
         @db.exec("UPDATE messages SET uid = ? WHERE gmailId = ?", uid, gmail_id)
     end
+
+    def set_message_flags(gmail_id : Int64, flags : Set(String)) : Void
+        @db.exec("DELETE FROM flagMap WHERE gmailId = ?", gmail_id)
+        flags.each do |flag|
+            @db.exec("INSERT OR IGNORE INTO flags (name) VALUES (?)", flag)
+            @db.exec("INSERT INTO flagMap (gmailId, flagId) VALUES (" +
+                "?, (SELECT flagId FROM flags WHERE name = ?))",
+                gmail_id, flag)
+        end
+    end
+
+    def set_message_labels(gmail_id : Int64, labels : Set(String)) : Void
+        @db.exec("DELETE FROM labelMap WHERE gmailId = ?", gmail_id)
+        labels.each do |label|
+            @db.exec("INSERT OR IGNORE INTO labels (name) VALUES (?)", label)
+            @db.exec("INSERT INTO labelMap (gmailId, labelId) VALUES (" +
+                "?, (SELECT labelId FROM labels WHERE name = ?))",
+                gmail_id, label)
+        end
+    end
 end
