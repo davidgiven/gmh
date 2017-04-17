@@ -85,4 +85,20 @@ class Database
             return uids
         end
     end
+
+    private def time_to_epoch(time : Time?) : Int64?
+        if time
+            time.epoch
+        else
+            nil
+        end
+    end
+
+    def set_message_value(gmail_id : Int64, envelope : ImapEnvelope, body : String) : Void
+        @db.exec("UPDATE messages SET messageId = ?, date = ?, downloaded = 1 WHERE gmailId = ?",
+            envelope.message_id, time_to_epoch(envelope.received), gmail_id)
+        @db.exec("DELETE FROM messageData WHERE docId = ?", gmail_id)
+        @db.exec("INSERT INTO messageData (docId, subject, body) values (?, ?, ?)",
+            gmail_id, envelope.subject, body)
+    end
 end

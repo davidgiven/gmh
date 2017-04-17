@@ -2,12 +2,12 @@ require "spec"
 require "../src/gmh/imap_responses"
 
 describe "ImapResponseScanner" do
-    describe "elements" do
+    it "elements" do
         ImapResponseScanner.new("ATOM").expect_element.should eq "ATOM"
         ImapResponseScanner.new("(ONE TWO THREE)").expect_element.should eq ["ONE", "TWO", "THREE"]
     end
 
-    describe "strings" do
+    it "strings" do
         ImapResponseScanner.new("string").expect_element.should eq "string"
         ImapResponseScanner.new("\"string\"").expect_element.should eq "string"
         ImapResponseScanner.new("\"st\\ring\"").expect_element.should eq "st\\ring"
@@ -31,12 +31,12 @@ describe "ImapResponseScanner" do
 end
 
 describe "ImapResponseParser" do
-    describe "permanentflags" do
+    it "permanentflags" do
         s = %{[PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen $Forwarded $MDNSent $NotPhishing $Phishing $label1 $label2 $label3 Junk NonJunk Old receipt-handled \*)] Flags permitted.}
         r = PermanentFlagsOKResponse.new("*", s, ImapResponseScanner.new(s))
     end
 
-    describe "fetches" do
+    it "fetches" do
         s = %{FETCH (X-GM-MSGID 1327597056069823273 X-GM-LABELS ("\\Inbox" "\\Sent") UID 26149 MODSEQ (4187954) FLAGS (\Seen))}
         r = FetchResponse.new("*", s, ImapResponseScanner.new(s))
 
@@ -46,13 +46,29 @@ describe "ImapResponseParser" do
 end
 
 describe "ImapEnvelope" do
-    describe "parsing" do
-        s = %{("Wed, 07 Nov 2012 18:46:46 +0000" "subject" (("From" NIL "from" "example.com")) (("Sender" NIL "sender" "example.com")) (("Google Alerts" NIL "googlealerts-noreply" "google.com")) ((NIL NIL "david.given" "gmail.com")) NIL NIL NIL "<20cf300e524bfb64cb04cdec2372@google.com>")}
+    it "parsing" do
+        s = %{("Wed, 07 Nov 2012 18:46:46 +0000" \
+                "subject" \
+                (("From" NIL "from" "example.com")) \
+                (("Sender" NIL "sender" "example.com")) \
+                (("ReplyTo1" NIL "1" "example.com")("ReplyTo2" NIL "2" "example.com")) \
+                ((NIL NIL "to" "example.com")) \
+                NIL \
+                NIL \
+                NIL \
+                "<20cf300e524bfb64cb04cdec2372@google.com>")}
         e = ImapResponseScanner.new(s).expect_element
         env = ImapEnvelope.new(e.as(Array(ImapElement)))
         env.received.to_s.should eq "2012-11-07 18:46:46 UTC"
         env.subject.should eq "subject"
         env.sender.to_s.should eq "Sender <sender@example.com>"
         env.from.to_s.should eq "From <from@example.com>"
+        env.reply_to.not_nil!.to_a.should eq [
+            ImapEmail.new("ReplyTo1", "1@example.com"), ImapEmail.new("ReplyTo2", "2@example.com")]
+        env.to.not_nil!.to_a.should eq [ImapEmail.new("to@example.com", "to@example.com")]
+        env.cc.should eq Set(ImapEmail).new
+        env.bcc.should eq Set(ImapEmail).new
+        env.in_reply_to.should eq nil
+        env.message_id.should eq "<20cf300e524bfb64cb04cdec2372@google.com>"
     end
 end

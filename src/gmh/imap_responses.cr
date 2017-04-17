@@ -208,7 +208,7 @@ class FetchResponse < ImapResponse
     end
 end
 
-class ImapEmail
+struct ImapEmail
     getter realname : String
     getter email : String
 
@@ -221,6 +221,11 @@ class ImapEmail
         end
     end
 
+    def initialize(realname : String, email : String)
+        @realname = realname
+        @email = email
+    end
+
     def to_s(io)
         if @realname == @email
             io << @email
@@ -231,7 +236,10 @@ class ImapEmail
 end
 
 class ImapEnvelope
-    @@time_format = Time::Format.new("%a, %e %b %Y %T %z")
+    @@time_formats = [
+        Time::Format.new("%a, %e %b %Y %T %z"),
+        Time::Format.new("%e %b %Y %T %z")
+    ]
 
     getter received : Time?
     getter subject = ""
@@ -242,13 +250,20 @@ class ImapEnvelope
     getter cc = Set(ImapEmail).new
     getter bcc = Set(ImapEmail).new
     getter in_reply_to : String?
+    getter message_id : String
 
     private def imap_to_time(imap : ImapElement) : Time?
         s = imap.as(String)
         if s == "NIL"
             nil
         else
-            @@time_format.parse(s)
+            @@time_formats.each do |tf|
+                begin
+                    return tf.parse(s)
+                rescue e : Time::Format::Error
+                end
+            end
+            raise UnmatchedException.new(s)
         end
     end
 
@@ -260,6 +275,14 @@ class ImapEnvelope
             end
         end
         s
+    end
+
+    private def imap_to_s(imap : ImapElement) : String?
+        if imap = "NIL"
+            nil
+        else
+            imap.as(String)
+        end
     end
 
     private def single_email(emails : Set(ImapEmail)) : ImapEmail?
@@ -277,6 +300,12 @@ class ImapEnvelope
         end
         @from = single_email(imap_to_emails(imap[2]))
         @sender = single_email(imap_to_emails(imap[3]))
+        @reply_to = imap_to_emails(imap[4])
+        @to = imap_to_emails(imap[5])
+        @cc = imap_to_emails(imap[6])
+        @bcc = imap_to_emails(imap[7])
+        @in_reply_to = imap_to_s(imap[8])
+        @message_id = imap[9].as(String)
     end
 end
 

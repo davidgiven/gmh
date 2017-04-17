@@ -22,6 +22,8 @@ class MessageSkeleton
     @uid : Int64?
     @flags : Set(String)?
     @labels : Set(String)?
+    @envelope : ImapEnvelope?
+    @body : String?
 
     private def to_i64(s : String?) : Int64?
         if s.nil?
@@ -44,11 +46,18 @@ class MessageSkeleton
     end
 
     def initialize(msg : FetchResponse)
-        @gmail_id = to_i64(msg.attr["X-GM-MSGID"].as(String?))
-        @thread_id = to_i64(msg.attr["X-GM-THRID"].as(String?))
-        @uid = to_i64(msg.attr["UID"].as(String?))
-        @flags = to_set(msg.attr["FLAGS"].as(Array(ImapElement)?))
-        @labels = to_set(msg.attr["X-GM-LABELS"].as(Array(ImapElement)?))
+        @gmail_id = to_i64(msg.attr["X-GM-MSGID"]?.as(String?))
+        @thread_id = to_i64(msg.attr["X-GM-THRID"]?.as(String?))
+        @uid = to_i64(msg.attr["UID"]?.as(String?))
+        @flags = to_set(msg.attr["FLAGS"]?.as(Array(ImapElement)?))
+        @labels = to_set(msg.attr["X-GM-LABELS"]?.as(Array(ImapElement)?))
+
+        envelope = msg.attr["ENVELOPE"]?.as(Array(ImapElement)?)
+        if envelope
+            @envelope = ImapEnvelope.new(envelope)
+        end
+
+        @body = msg.attr["BODY[]"]?.as(String?)
     end
 
     def write_to(db : Database)
@@ -56,15 +65,18 @@ class MessageSkeleton
             return
         end
 
-        db.add_message(@gmail_id.as(Int64))
-        if !@uid.nil?
-            db.set_message_uid(@gmail_id.as(Int64), @uid.as(Int64))
+        db.add_message(@gmail_id.not_nil!)
+        if @uid
+            db.set_message_uid(@gmail_id.not_nil!, @uid.not_nil!)
         end
-        if !@flags.nil?
-            db.set_message_flags(@gmail_id.as(Int64), @flags.as(Set(String)))
+        if @flags
+            db.set_message_flags(@gmail_id.not_nil!, @flags.not_nil!)
         end
-        if !@labels.nil?
-            db.set_message_labels(@gmail_id.as(Int64), @labels.as(Set(String)))
+        if @labels
+            db.set_message_labels(@gmail_id.not_nil!, @labels.not_nil!)
+        end
+        if @envelope
+            db.set_message_value(@gmail_id.not_nil!, @envelope.not_nil!, @body.not_nil!)
         end
     end
 end
@@ -96,7 +108,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
                 highest_modseq = response.value
             when ExistsResponse
                 approximate_message_count = response.value
-            when FlagsResponse | PermanentFlagsOKResponse | RecentResponse
+            when FlagsResponse, PermanentFlagsOKResponse, RecentResponse
                 # ignore silently
             when FetchResponse
                 MessageSkeleton.new(response).write_to(db)
@@ -125,8 +137,8 @@ def doSyncCommand(globalFlags : GlobalFlags)
     db.set_var("modseq", highest_modseq.to_s)
     db.commit
 
-    puts("fetching message bodies (this bit is ^C-able)")
     non_downloaded_uids_count = db.get_non_downloaded_uids(Int32::MAX).size
+    puts("fetching #{non_downloaded_uids_count} message bodies (this bit is ^C-able)")
     ProgressBar.count(non_downloaded_uids_count) do |pb|
         while true
             uid_batch = db.get_non_downloaded_uids(flags.batch_size)

@@ -4,6 +4,10 @@ class UnmatchedException < Exception
     def initialize(s)
         super("cannot match '#{s}...'")
     end
+
+    def initialize(s, e)
+        super("cannot match '#{s}...' because: #{e}")
+    end
 end
 
 class ImapResponseScanner < StringScanner
