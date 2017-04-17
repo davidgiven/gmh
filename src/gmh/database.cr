@@ -42,6 +42,7 @@ class Database
 
     def add_message(gmail_id : Int64) : Void
         @db.exec("INSERT OR IGNORE INTO messages (gmailId) VALUES (?)", gmail_id)
+        @db.exec("INSERT OR IGNORE INTO messageData (docId, subject, body) VALUES (?, '', '')", gmail_id)
     end
 
     def set_message_uid(gmail_id : Int64, uid : Int64) : Void
@@ -97,8 +98,7 @@ class Database
     def set_message_value(gmail_id : Int64, envelope : ImapEnvelope, body : String) : Void
         @db.exec("UPDATE messages SET messageId = ?, date = ?, downloaded = 1 WHERE gmailId = ?",
             envelope.message_id, time_to_epoch(envelope.received), gmail_id)
-        @db.exec("DELETE FROM messageData WHERE docId = ?", gmail_id)
-        @db.exec("INSERT INTO messageData (docId, subject, body) values (?, ?, ?)",
-            gmail_id, envelope.subject, body)
+        @db.exec("UPDATE messageData SET subject = ?, body = ? WHERE docId = ?",
+            envelope.subject, body, gmail_id)
     end
 end

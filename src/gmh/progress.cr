@@ -7,6 +7,12 @@ module ProgressBarFuncs
         pb.set_progress(max)
         pb.update
     end
+
+    def indefinite
+        pb = ProgressBar.new(Int32::MAX)
+        yield pb
+        pb.update
+    end
 end
 
 private def time_in_ms : Int64
@@ -26,7 +32,9 @@ end
 class ProgressBar
     extend ProgressBarFuncs
 
-    @pb_chars = [" ", "▏","▎","▍","▌","▋","▊","▉","█"]
+    @@pb_chars = [" ", "▏","▎","▍","▌","▋","▊","▉","█"]
+    @@pb_indefinite_char = "░"
+
     @count = 0
     @max : Int32
     @width : Int32
@@ -46,10 +54,15 @@ class ProgressBar
 
     def status_string : String
         per_sec = @count.to_f / (@now - @start_time).to_f * 1000
-        time_so_far = (@now - @start_time).to_f / 1000
-        estimated_total = @max.to_f / per_sec
 
-        " #{per_sec.to_i}/sec, #{as_time(estimated_total - time_so_far)} left"
+        if @max == Int32::MAX
+            " #{per_sec.to_i}/sec, ??m:??s left"
+        else
+            time_so_far = (@now - @start_time).to_f / 1000
+            estimated_total = @max.to_f / per_sec
+
+            " #{per_sec.to_i}/sec, #{as_time(estimated_total - time_so_far)} left"
+        end
     end
 
     def update
@@ -57,19 +70,21 @@ class ProgressBar
 
         status = status_string
         width = @width - status.size
-        if (@count >= @max)
-            s << @pb_chars[@pb_chars.size-1] * width
+        if @max == Int32::MAX
+            s << @@pb_indefinite_char * width
+        elsif (@count >= @max)
+            s << @@pb_chars[@@pb_chars.size-1] * width
         else
-            scaled_progress = @count * width * @pb_chars.size / @max
-            num_filled = scaled_progress / @pb_chars.size
-            subchar = scaled_progress % @pb_chars.size
+            scaled_progress = @count * width * @@pb_chars.size / @max
+            num_filled = scaled_progress / @@pb_chars.size
+            subchar = scaled_progress % @@pb_chars.size
             numempty = width - num_filled - 1
 
-            s << @pb_chars[@pb_chars.size-1] * num_filled
+            s << @@pb_chars[@@pb_chars.size-1] * num_filled
             if subchar >= 0
-                s << @pb_chars[subchar]
+                s << @@pb_chars[subchar]
             end
-            s << @pb_chars[0] * numempty
+            s << @@pb_chars[0] * numempty
         end
 
         s << status << "\n"

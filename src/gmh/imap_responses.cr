@@ -1,5 +1,6 @@
 require "string_scanner"
 require "./imap_scanner"
+require "./rfc2822"
 
 private macro try_parsing(expr)
     old_offset = scanner.offset
@@ -236,11 +237,6 @@ struct ImapEmail
 end
 
 class ImapEnvelope
-    @@time_formats = [
-        Time::Format.new("%a, %e %b %Y %T %z"),
-        Time::Format.new("%e %b %Y %T %z")
-    ]
-
     getter received : Time?
     getter subject = ""
     getter from : ImapEmail?
@@ -257,13 +253,7 @@ class ImapEnvelope
         if s == "NIL"
             nil
         else
-            @@time_formats.each do |tf|
-                begin
-                    return tf.parse(s)
-                rescue e : Time::Format::Error
-                end
-            end
-            raise UnmatchedException.new(s)
+            Rfc2822.parse_time(s)
         end
     end
 

@@ -92,7 +92,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
     capabilities = Set(String).new
     uid_validity = 0_i64
     highest_modseq = 0_i64
-    approximate_message_count = 0_i64
+    approximate_message_count = 0
     old_uid_validity = db.get_var("uidvalidity", "0").to_i64
     old_highest_modseq = db.get_var("modseq", "0").to_i64
 
@@ -107,7 +107,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
             when HighestModSeqOKResponse
                 highest_modseq = response.value
             when ExistsResponse
-                approximate_message_count = response.value
+                approximate_message_count = response.value.to_i32
             when FlagsResponse, PermanentFlagsOKResponse, RecentResponse
                 # ignore silently
             when FetchResponse
@@ -123,7 +123,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
     if flags.force_uid_refresh || (uid_validity != old_uid_validity)
         puts("refreshing UID map")
         ProgressBar.count(approximate_message_count.to_i32) do |pb|
-            imap.command("FETCH 1:* (UID X-GM-MSGID)") do |r|
+            imap.command("FETCH 1:* (UID X-GM-MSGID) (CHANGEDSINCE ") do |r|
                 pb.next
                 handler.call(r)
             end
@@ -133,7 +133,12 @@ def doSyncCommand(globalFlags : GlobalFlags)
     end
 
     puts("fetching message updates from #{old_highest_modseq} to #{highest_modseq}")
-    imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-LABELS FLAGS) (CHANGEDSINCE #{old_highest_modseq})", &handler)
+    ProgressBar.indefinite do |pb|
+        imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-LABELS FLAGS) (CHANGEDSINCE #{old_highest_modseq})") do |r|
+            pb.next
+            handler.call(r)
+        end
+    end
     db.set_var("modseq", highest_modseq.to_s)
     db.commit
 
@@ -147,7 +152,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
             end
 
             cmd = String::Builder.new
-            cmd << "FETCH "
+            cmd << "UID FETCH "
             first = true
             uid_batch.each do |uid|
                 if !first
@@ -168,5 +173,4 @@ def doSyncCommand(globalFlags : GlobalFlags)
             db.commit
         end
     end
-    puts non_downloaded_uids_count
 end
