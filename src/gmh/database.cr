@@ -1,6 +1,15 @@
 require "db"
 require "sqlite3"
 
+enum AddressKind
+    FROM,
+    TO,
+    CC,
+    BCC,
+    REPLY_TO,
+    SENDER
+end
+
 class Database
     @db : DB::Database
 
@@ -95,10 +104,41 @@ class Database
         end
     end
 
-    def set_message_value(gmail_id : Int64, envelope : ImapEnvelope, body : String) : Void
-        @db.exec("UPDATE messages SET messageId = ?, date = ?, downloaded = 1 WHERE gmailId = ?",
-            envelope.message_id, time_to_epoch(envelope.received), gmail_id)
-        @db.exec("UPDATE messageData SET subject = ?, body = ? WHERE docId = ?",
-            envelope.subject, body, gmail_id)
+    def set_message_addresses(gmail_id : Int64, addresses : Set(ImapEmail), kind : AddressKind)
+        @db.exec("DELETE FROM addressMap WHERE gmailId = ? AND kind = ?",
+            gmail_id, kind.value)
+
+        addresses.each do | address |
+            @db.exec("INSERT OR IGNORE INTO addresses (email, name) VALUES (?, ?)",
+                address.email, address.realname)
+            @db.exec(<<-SQL
+                INSERT INTO addressMap (gmailId, addressId, kind)
+                    VALUES (?, (SELECT addressId FROM addresses WHERE email = ?), ?)
+            SQL, gmail_id, address.email, kind.value)
+        end
+    end
+
+    def set_message_envelope(gmail_id : Int64, envelope : ImapEnvelope) : Void
+        @db.exec("UPDATE messages SET messageId = ? WHERE gmailId = ?",
+            envelope.message_id, gmail_id)
+        @db.exec("UPDATE messageData SET subject = ? WHERE docId = ?",
+            envelope.subject, gmail_id)
+        set_message_addresses(gmail_id, envelope.from, AddressKind::FROM)
+        set_message_addresses(gmail_id, envelope.sender, AddressKind::SENDER)
+        set_message_addresses(gmail_id, envelope.reply_to, AddressKind::REPLY_TO)
+        set_message_addresses(gmail_id, envelope.to, AddressKind::TO)
+        set_message_addresses(gmail_id, envelope.cc, AddressKind::CC)
+        set_message_addresses(gmail_id, envelope.bcc, AddressKind::BCC)
+    end
+
+    def set_message_date(gmail_id : Int64, date : Time) : Void
+        @db.exec("UPDATE messages SET date = ? WHERE gmailId = ?",
+            time_to_epoch(date), gmail_id)
+    end
+
+    def set_message_body(gmail_id : Int64, body : String) : Void
+        @db.exec("UPDATE messages SET downloaded = 1 WHERE gmailId = ?", gmail_id)
+        @db.exec("UPDATE messageData SET body = ? WHERE docId = ?",
+            body, gmail_id)
     end
 end

@@ -83,7 +83,8 @@ class ImapResponseScanner < StringScanner
         bytes = self[1].to_i
         s = self.peek(bytes)
         self.offset = self.offset + bytes
-        s
+        self.expect(/\s*/)
+        return s
     end
 
     def expect_trailing : String

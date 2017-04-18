@@ -27,6 +27,11 @@ describe "ImapResponseScanner" do
         s.expect_element.should eq "foo"
         s.expect_element.should eq "bar"
         s.expect_eol
+
+        s = ImapResponseScanner.new("{3}foo bar")
+        s.expect_element.should eq "foo"
+        s.expect_element.should eq "bar"
+        s.expect_eol
     end
 end
 
@@ -59,10 +64,9 @@ describe "ImapEnvelope" do
                 "<20cf300e524bfb64cb04cdec2372@google.com>")}
         e = ImapResponseScanner.new(s).expect_element
         env = ImapEnvelope.new(e.as(Array(ImapElement)))
-        env.received.to_s.should eq "2012-11-07 18:46:46 UTC"
         env.subject.should eq "subject"
-        env.sender.to_s.should eq "Sender <sender@example.com>"
-        env.from.to_s.should eq "From <from@example.com>"
+        env.sender.not_nil!.to_a.should eq [ImapEmail.new("Sender", "sender@example.com")]
+        env.from.not_nil!.to_a.should eq [ImapEmail.new("From", "from@example.com")]
         env.reply_to.not_nil!.to_a.should eq [
             ImapEmail.new("ReplyTo1", "1@example.com"), ImapEmail.new("ReplyTo2", "2@example.com")]
         env.to.not_nil!.to_a.should eq [ImapEmail.new("to@example.com", "to@example.com")]

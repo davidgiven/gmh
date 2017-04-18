@@ -58,7 +58,13 @@ class Imap
     end
 
     private def next_response : ImapResponse
-        ImapResponse.parse(get)
+        s = get
+        begin
+            return ImapResponse.parse(s)
+        rescue e: UnmatchedException
+            puts "#{e} in:\n#{s}\n"
+            exit 1
+        end
     end
 
     private def new_tag : String

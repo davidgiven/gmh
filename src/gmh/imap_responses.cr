@@ -237,25 +237,15 @@ struct ImapEmail
 end
 
 class ImapEnvelope
-    getter received : Time?
     getter subject = ""
-    getter from : ImapEmail?
-    getter sender : ImapEmail?
+    getter from = Set(ImapEmail).new
+    getter sender = Set(ImapEmail).new
     getter reply_to = Set(ImapEmail).new
     getter to = Set(ImapEmail).new
     getter cc = Set(ImapEmail).new
     getter bcc = Set(ImapEmail).new
     getter in_reply_to : String?
     getter message_id : String
-
-    private def imap_to_time(imap : ImapElement) : Time?
-        s = imap.as(String)
-        if s == "NIL"
-            nil
-        else
-            Rfc2822.parse_time(s)
-        end
-    end
 
     private def imap_to_emails(imap : ImapElement) : Set(ImapEmail)
         s = Set(ImapEmail).new
@@ -275,21 +265,13 @@ class ImapEnvelope
         end
     end
 
-    private def single_email(emails : Set(ImapEmail)) : ImapEmail?
-        emails.each do |email|
-            return email
-        end
-        nil
-    end
-
     def initialize(imap : Array(ImapElement))
-        @received = imap_to_time(imap[0])
         @subject = imap[1].as(String)
         if @subject == "NIL"
             @subject = ""
         end
-        @from = single_email(imap_to_emails(imap[2]))
-        @sender = single_email(imap_to_emails(imap[3]))
+        @from = imap_to_emails(imap[2])
+        @sender = imap_to_emails(imap[3])
         @reply_to = imap_to_emails(imap[4])
         @to = imap_to_emails(imap[5])
         @cc = imap_to_emails(imap[6])

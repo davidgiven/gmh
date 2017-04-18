@@ -17,6 +17,8 @@ class SyncFlags
 end
 
 class MessageSkeleton
+    @@time_format = Time::Format.new("%d-%h-%Y %H:%M:%S %z")
+
     @gmail_id : Int64?
     @thread_id : Int64?
     @uid : Int64?
@@ -24,6 +26,7 @@ class MessageSkeleton
     @labels : Set(String)?
     @envelope : ImapEnvelope?
     @body : String?
+    @date : Time?
 
     private def to_i64(s : String?) : Int64?
         if s.nil?
@@ -45,12 +48,21 @@ class MessageSkeleton
         end
     end
 
+    private def to_time(s : String?) : Time?
+        if s.nil?
+            return nil
+        else
+            return @@time_format.parse(s)
+        end
+    end
+
     def initialize(msg : FetchResponse)
         @gmail_id = to_i64(msg.attr["X-GM-MSGID"]?.as(String?))
         @thread_id = to_i64(msg.attr["X-GM-THRID"]?.as(String?))
         @uid = to_i64(msg.attr["UID"]?.as(String?))
         @flags = to_set(msg.attr["FLAGS"]?.as(Array(ImapElement)?))
         @labels = to_set(msg.attr["X-GM-LABELS"]?.as(Array(ImapElement)?))
+        @date = to_time(msg.attr["INTERNALDATE"]?.as(String?))
 
         envelope = msg.attr["ENVELOPE"]?.as(Array(ImapElement)?)
         if envelope
@@ -76,7 +88,13 @@ class MessageSkeleton
             db.set_message_labels(@gmail_id.not_nil!, @labels.not_nil!)
         end
         if @envelope
-            db.set_message_value(@gmail_id.not_nil!, @envelope.not_nil!, @body.not_nil!)
+            db.set_message_envelope(@gmail_id.not_nil!, @envelope.not_nil!)
+        end
+        if @date
+            db.set_message_date(@gmail_id.not_nil!, @date.not_nil!)
+        end
+        if @body
+            db.set_message_body(@gmail_id.not_nil!, @body.not_nil!)
         end
     end
 end
@@ -108,7 +126,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
                 highest_modseq = response.value
             when ExistsResponse
                 approximate_message_count = response.value.to_i32
-            when FlagsResponse, PermanentFlagsOKResponse, RecentResponse
+            when FlagsResponse, PermanentFlagsOKResponse, RecentResponse, UidNextOKResponse
                 # ignore silently
             when FetchResponse
                 MessageSkeleton.new(response).write_to(db)
@@ -123,7 +141,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
     if flags.force_uid_refresh || (uid_validity != old_uid_validity)
         puts("refreshing UID map")
         ProgressBar.count(approximate_message_count.to_i32) do |pb|
-            imap.command("FETCH 1:* (UID X-GM-MSGID) (CHANGEDSINCE ") do |r|
+            imap.command("FETCH 1:* (UID X-GM-MSGID)") do |r|
                 pb.next
                 handler.call(r)
             end
@@ -132,9 +150,9 @@ def doSyncCommand(globalFlags : GlobalFlags)
         db.commit
     end
 
-    puts("fetching message updates from #{old_highest_modseq} to #{highest_modseq}")
+    puts("fetching changed message summaries")
     ProgressBar.indefinite do |pb|
-        imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-LABELS FLAGS) (CHANGEDSINCE #{old_highest_modseq})") do |r|
+        imap.command("FETCH 1:* (UID X-GM-MSGID X-GM-THRID X-GM-LABELS FLAGS ENVELOPE INTERNALDATE) (CHANGEDSINCE #{old_highest_modseq})") do |r|
             pb.next
             handler.call(r)
         end
@@ -162,7 +180,7 @@ def doSyncCommand(globalFlags : GlobalFlags)
                 cmd << uid
             end
 
-            cmd << " (X-GM-MSGID X-GM-THRID ENVELOPE BODY.PEEK[])"
+            cmd << " (X-GM-MSGID BODY.PEEK[])"
             imap.command(cmd.to_s) do |r|
                 handler.call(r)
                 if r.is_a?(FetchResponse)
