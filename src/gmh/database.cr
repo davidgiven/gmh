@@ -136,6 +136,10 @@ class Database
             time_to_epoch(date), gmail_id)
     end
 
+    def set_message_headers(gmail_id : Int64, headers : String) : Void
+        @db.exec("UPDATE messages SET headers = ? WHERE gmailId = ?", headers, gmail_id)
+    end
+
     def set_message_body(gmail_id : Int64, body : String) : Void
         @db.exec("UPDATE messages SET downloaded = 1 WHERE gmailId = ?", gmail_id)
         @db.exec("UPDATE messageData SET body = ? WHERE docId = ?",

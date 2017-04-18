@@ -94,7 +94,12 @@ class MessageSkeleton
             db.set_message_date(@gmail_id.not_nil!, @date.not_nil!)
         end
         if @body
-            db.set_message_body(@gmail_id.not_nil!, @body.not_nil!)
+            s = @body.not_nil!.split("\r\n\r\n", 2)
+            if s.size != 2
+                raise "bad split!"
+            end
+            db.set_message_headers(@gmail_id.not_nil!, s[0])
+            db.set_message_body(@gmail_id.not_nil!, s[1])
         end
     end
 end
