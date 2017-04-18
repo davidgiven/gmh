@@ -214,7 +214,7 @@ struct ImapEmail
     getter email : String
 
     def initialize(imap : Array(ImapElement))
-        @realname = imap[0].as(String)
+        @realname = Rfc2822.parse_encoded(imap[0].as(String))
         @email = imap[2].as(String) + "@" + imap[3].as(String)
 
         if @realname == "NIL"
@@ -266,7 +266,7 @@ class ImapEnvelope
     end
 
     def initialize(imap : Array(ImapElement))
-        @subject = imap[1].as(String)
+        @subject = Rfc2822.parse_encoded(imap[1].as(String))
         if @subject == "NIL"
             @subject = ""
         end
