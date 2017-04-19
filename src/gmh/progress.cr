@@ -21,11 +21,13 @@ end
 
 private def as_time(duration_secs : Float64) : String
     if duration_secs.infinite?
-        "(unknown)"
+        return "(unknown)"
+    elsif (duration_secs < 0.0) || duration_secs.nan?
+        return "00m:00s"
     else
         seconds = (duration_secs % 60).to_i
         minutes = (duration_secs / 60).to_i
-        "%dm:%02s" % [minutes, seconds]
+        return "%dm:%02s" % [minutes, seconds]
     end
 end
 
@@ -33,8 +35,9 @@ class ProgressBar
     extend ProgressBarFuncs
 
     @@pb_chars = [" ", "▏","▎","▍","▌","▋","▊","▉","█"]
-    @@pb_indefinite_char = "░"
+    @@pb_indef_chars = ["⡀⠀", "⢀⠀", "⠀⡀", "⠀⢀", "⠀⠠", "⠀⠐", "⠀⠈", "⠀⠁", "⠈⠀", "⠁⠀", "⠂⠀", "⠄⠀"]
 
+    @progress = 0
     @count = 0
     @max : Int32
     @width : Int32
@@ -53,29 +56,36 @@ class ProgressBar
 
 
     def status_string : String
-        per_sec = @count.to_f / (@now - @start_time).to_f * 1000
+        per_sec = @progress.to_f / (@now - @start_time).to_f * 1000
+        if per_sec.nan?
+            per_sec = 0
+        end
 
         if @max == Int32::MAX
-            " #{per_sec.to_i}/sec, ??m:??s left"
+            "#{per_sec.to_i}/sec "
         else
             time_so_far = (@now - @start_time).to_f / 1000
             estimated_total = @max.to_f / per_sec
+            time_left = estimated_total - time_so_far
 
-            " #{per_sec.to_i}/sec, #{as_time(estimated_total - time_so_far)} left"
+            "#{per_sec.to_i}/sec, #{as_time(time_left)} left "
         end
     end
 
     def update
+        @count += 1
+
         s = String::Builder.new
 
         status = status_string
+        s << status
         width = @width - status.size
         if @max == Int32::MAX
-            s << @@pb_indefinite_char * width
-        elsif (@count >= @max)
+            s << @@pb_indef_chars[@count % @@pb_indef_chars.size]
+        elsif (@progress >= @max)
             s << @@pb_chars[@@pb_chars.size-1] * width
         else
-            scaled_progress = @count * width * @@pb_chars.size / @max
+            scaled_progress = @progress * width * @@pb_chars.size / @max
             num_filled = scaled_progress / @@pb_chars.size
             subchar = scaled_progress % @@pb_chars.size
             numempty = width - num_filled - 1
@@ -86,8 +96,8 @@ class ProgressBar
             end
             s << @@pb_chars[0] * numempty
         end
+        s << "\n"
 
-        s << status << "\n"
         Termcap.put("up")
         Termcap.put("cd")
         LibNcursesw.putp(s.to_s)
@@ -96,7 +106,7 @@ class ProgressBar
     end
 
     def set_progress(progress : Int32)
-        @count = progress.clamp(0, @max)
+        @progress = progress.clamp(0, @max)
         @now = time_in_ms
         if (@now - @last_update_time) > 200
             update
@@ -104,6 +114,6 @@ class ProgressBar
     end
 
     def next(inc = 1)
-        set_progress(@count + inc)
+        set_progress(@progress + inc)
     end
 end
