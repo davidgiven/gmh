@@ -43,7 +43,7 @@ def doInitCommand(globalFlags : GlobalFlags)
         CREATE INDEX IF NOT EXISTS messages_by_uid ON messages (uid)
     SQL)
     db.exec(<<-SQL
-        CREATE INDEX IF NOT EXISTS messages_by_threadId ON messages (uid)
+        CREATE INDEX IF NOT EXISTS messages_by_threadId ON messages (threadId)
     SQL)
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS messages_by_downloaded ON messages (downloaded)

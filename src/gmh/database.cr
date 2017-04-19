@@ -58,6 +58,10 @@ class Database
         @db.exec("UPDATE messages SET uid = ? WHERE gmailId = ?", uid, gmail_id)
     end
 
+    def set_message_thread(gmail_id : Int64, thread_id : Int64) : Void
+        @db.exec("UPDATE messages SET threadId = ? WHERE gmailId = ?", thread_id, gmail_id)
+    end
+
     def set_message_flags(gmail_id : Int64, flags : Set(String)) : Void
         @db.exec("DELETE FROM flagMap WHERE gmailId = ?", gmail_id)
         flags.each do |flag|

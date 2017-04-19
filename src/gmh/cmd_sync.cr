@@ -81,6 +81,9 @@ class MessageSkeleton
         if @uid
             db.set_message_uid(@gmail_id.not_nil!, @uid.not_nil!)
         end
+        if @thread_id
+            db.set_message_thread(@gmail_id.not_nil!, @thread_id.not_nil!)
+        end
         if @flags
             db.set_message_flags(@gmail_id.not_nil!, @flags.not_nil!)
         end
