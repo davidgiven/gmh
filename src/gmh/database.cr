@@ -31,8 +31,8 @@ class Database
         @db.exec("begin")
     end
 
-    def exec(sql : String)
-        @db.exec(sql)
+    def exec(sql : String, *args)
+        @db.exec(sql, *args)
     end
 
     def get_var(name : String, default : String = "") : String
@@ -148,5 +148,9 @@ class Database
         @db.exec("UPDATE messages SET downloaded = 1 WHERE gmailId = ?", gmail_id)
         @db.exec("UPDATE messageData SET body = ? WHERE docId = ?",
             body, gmail_id)
+    end
+
+    def get_selected_message_count : Int32
+        return @db.scalar("SELECT COUNT(*) FROM selected").as(Int64).to_i
     end
 end
