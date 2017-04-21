@@ -40,16 +40,12 @@ class ProgressBar
     @progress = 0
     @count = 0
     @max : Int32
-    @width : Int32
     @start_time : Int64 = time_in_ms
     @last_update_time = 0_i64
     @now = 0_i64
 
     def initialize(max)
         @max = max
-        LibC.setlocale(LibNcursesw::LC_ALL, "")
-        LibNcursesw.tgetent(nil, ENV["TERM"])
-        @width = LibNcursesw.tgetnum("co").to_i
         LibNcursesw.putp("\n")
         update
     end
@@ -79,7 +75,7 @@ class ProgressBar
 
         status = status_string
         s << status
-        width = @width - status.size
+        width = Termcap.width - status.size
         if @max == Int32::MAX
             s << @@pb_indef_chars[@count % @@pb_indef_chars.size]
         elsif (@progress >= @max)

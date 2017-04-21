@@ -15,17 +15,21 @@ lib LibNcursesw
   fun putp(str : LibC::Char*) : Int32
 end
 
+LibC.setlocale(LibNcursesw::LC_ALL, "")
+LibNcursesw.tgetent(nil, ENV["TERM"])
+
 module Termcap
     extend self
 
-    @@cache = Hash(String, LibC::Char*).new
+    @@cache = Hash(String, String).new
+    @@width : Int32 = LibNcursesw.tgetnum("co").to_i
 
-    def [](id : String) : LibC::Char*
+    def [](id : String) : String
         s = @@cache[id]?
         if s
             s
         else
-            s = LibNcursesw.tgetstr(id, nil)
+            s = String.new(LibNcursesw.tgetstr(id, nil))
             @@cache[id] = s
             s
         end
@@ -33,5 +37,9 @@ module Termcap
 
     def put(id : String) : Void
         LibNcursesw.putp(self[id])
+    end
+
+    def width : Int32
+        @@width
     end
 end

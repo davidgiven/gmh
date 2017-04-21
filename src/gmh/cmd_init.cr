@@ -32,7 +32,6 @@ def doInitCommand(globalFlags : GlobalFlags)
             gmailId INTEGER PRIMARY KEY,
             threadId INTEGER,
             uid INTEGER,
-            flags TEXT,
             date INTEGER,
             headers TEXT,
             messageId TEXT,
@@ -83,6 +82,9 @@ def doInitCommand(globalFlags : GlobalFlags)
     db.exec(<<-SQL
         CREATE INDEX IF NOT EXISTS labelMap_by_label ON labelMap (labelId)
     SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS labelMap_by_both ON labelMap (gmailId, labelId)
+    SQL)
 
     db.exec(<<-SQL
         CREATE TABLE IF NOT EXISTS flags (
@@ -106,7 +108,10 @@ def doInitCommand(globalFlags : GlobalFlags)
         CREATE INDEX IF NOT EXISTS flagMap_by_msg ON flagMap (gmailId)
     SQL)
     db.exec(<<-SQL
-        CREATE INDEX IF NOT EXISTS flagMap_by_label ON flagMap (flagId)
+        CREATE INDEX IF NOT EXISTS flagMap_by_flag ON flagMap (flagId)
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS flagMap_by_both ON flagMap (flagId, gmailId)
     SQL)
 
     db.exec(<<-SQL

@@ -35,6 +35,14 @@ class Database
         @db.exec(sql, *args)
     end
 
+    def query(sql : String, *args, &block)
+        @db.query(sql, *args) do |rs|
+            rs.each do
+                yield rs
+            end
+        end
+    end
+
     def get_var(name : String, default : String = "") : String
         @db.query("SELECT value FROM variables WHERE name = ?", name) do |rs|
             rs.each do
