@@ -11,16 +11,18 @@ module MessageSelector
             yield "SELECT gmailId FROM messages", [] of String
         elsif condition == "none:"
             yield "SELECT NULL LIMIT 0", [] of String
-        elsif m = /^^label:(.*)$/i.match(condition)
+        elsif m = /^label:(.*)$/i.match(condition)
             yield "SELECT gmailId FROM labelMap WHERE labelId =
                 (SELECT labelId FROM labels WHERE name = ?)", [m[1]]
-        elsif m = /^^flag:(.*)$/i.match(condition)
+        elsif m = /^flag:(.*)$/i.match(condition)
             yield "SELECT gmailId FROM flagMap WHERE flagId =
                 (SELECT flagId FROM flags WHERE name = ?)", [m[1]]
-        elsif m = /^^subject:(.*)$/i.match(condition)
+        elsif m = /^subject:(.*)$/i.match(condition)
             yield "SELECT docId FROM messageData WHERE subject MATCH ?", [m[1]]
-        elsif m = /^^body:(.*)$/i.match(condition)
+        elsif m = /^body:(.*)$/i.match(condition)
             yield "SELECT docId FROM messageData WHERE body MATCH ?", [m[1]]
+        elsif m = /^uid:(.*)$/i.match(condition)
+            yield "SELECT gmailId FROM messages WHERE uid = ?", [m[1].to_i]
         else
             raise BadSelectionSpecException.new("unrecognised condition '#{condition}'")
         end
