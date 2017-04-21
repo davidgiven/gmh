@@ -23,6 +23,9 @@ module MessageSelector
             yield "SELECT docId FROM messageData WHERE body MATCH ?", [m[1]]
         elsif m = /^uid:(.*)$/i.match(condition)
             yield "SELECT gmailId FROM messages WHERE uid = ?", [m[1].to_i]
+        elsif m = /^thread:(.*)$/i.match(condition)
+            yield "SELECT gmailId FROM messages WHERE threadId =
+                     (SELECT threadId FROM messages WHERE uid = ?)", [m[1].to_i]
         else
             raise BadSelectionSpecException.new("unrecognised condition '#{condition}'")
         end
