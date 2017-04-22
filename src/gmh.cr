@@ -4,6 +4,7 @@ require "./gmh/cmd_login"
 require "./gmh/cmd_sync"
 require "./gmh/cmd_select"
 require "./gmh/cmd_list"
+require "./gmh/cmd_cat"
 require "./gmh/globals"
 
 class GlobalFlags
@@ -38,6 +39,8 @@ def main
             doSelectCommand(flags)
         when "list"
             doListCommand(flags)
+        when "cat"
+            doCatCommand(flags)
 
         else
             raise UserException.new("invalid command '%s' (try 'help')" % command)
