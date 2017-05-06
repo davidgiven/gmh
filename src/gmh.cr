@@ -5,6 +5,7 @@ require "./gmh/cmd_sync"
 require "./gmh/cmd_select"
 require "./gmh/cmd_list"
 require "./gmh/cmd_cat"
+require "./gmh/cmd_show"
 require "./gmh/globals"
 
 class GlobalFlags
@@ -23,8 +24,10 @@ end
 def main
     flags = GlobalFlags.new.parse(ARGV)
 
-    command = flags.argv[0]?
-    flags.argv.shift
+    command = nil
+    if flags.argv.size > 0
+        command = flags.argv.shift
+    end
     case command
         when nil
             raise UserException.new("no command specified (try 'help')")
@@ -41,6 +44,8 @@ def main
             doListCommand(flags)
         when "cat"
             doCatCommand(flags)
+        when "show"
+            doShowCommand(flags)
 
         else
             raise UserException.new("invalid command '%s' (try 'help')" % command)
