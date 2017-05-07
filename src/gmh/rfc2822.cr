@@ -12,6 +12,7 @@ module Rfc2822
         t = body.gsub(/=([a-fA-F0-9][a-fA-F0-9])/) do |_, e|
             e[1].to_i32(16).chr
         end
+        t = t.gsub(/=\r\n/, "")
         return t.encode("ISO-8859-1")
     end
 
@@ -150,6 +151,8 @@ module Rfc2822
             case (headers["Content-Transfer-Encoding"]? || "7bit")
                 when "base64"
                     bytes = Base64.decode(message_text)
+                when "quoted-printable"
+                    bytes = decode_quoted_printable(message_text)
                 else
                     bytes = message_text.encode("ISO-8859-1")
             end
