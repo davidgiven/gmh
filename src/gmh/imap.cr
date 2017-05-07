@@ -27,6 +27,7 @@ class Imap
             puts (">" + line)
         end
         @socket << line
+        @socket.flush
     end
 
     private def get : String
