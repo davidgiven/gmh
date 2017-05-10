@@ -15,7 +15,7 @@ module MessageSelector
             yield "SELECT gmailId FROM labelMap WHERE labelId =
                 (SELECT labelId FROM labels WHERE name = ?)", [m[1]]
         elsif m = /^flag:(.*)$/i.match(condition)
-            yield "SELECT gmailId FROM flagMap WHERE flagId =
+            yield "SELECT gmailId FROM flagMapFused WHERE flagId =
                 (SELECT flagId FROM flags WHERE name = ?)", [m[1]]
         elsif m = /^subject:(.*)$/i.match(condition)
             yield "SELECT docId FROM messageData WHERE subject MATCH ?", [m[1]]

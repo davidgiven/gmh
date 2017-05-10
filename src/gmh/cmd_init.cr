@@ -115,6 +115,36 @@ def doInitCommand(globalFlags : GlobalFlags)
     SQL)
 
     db.exec(<<-SQL
+        CREATE TABLE IF NOT EXISTS flagMapChanges (
+            gmailId INTEGER,
+            oldFlagId INTEGER,
+            newFlagId INTEGER,
+            FOREIGN KEY (gmailId) REFERENCES messages(gmailId) ON DELETE CASCADE,
+            FOREIGN KEY (oldFlagId) REFERENCES flags(flagId) ON DELETE CASCADE,
+            FOREIGN KEY (newFlagId) REFERENCES flags(flagId) ON DELETE CASCADE
+        )
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS flagMapChanges_by_msg ON flagMapChanges (gmailId)
+    SQL)
+    db.exec(<<-SQL
+        CREATE INDEX IF NOT EXISTS flagMapChanges_by_both ON flagMapChanges (oldFlagId, gmailId)
+    SQL)
+    db.exec(<<-SQL
+        CREATE VIEW IF NOT EXISTS flagMapFused
+            (gmailId, flagId)
+            AS
+                SELECT flagMap.gmailId, COALESCE(flagMapChanges.newFlagId, flagMap.flagId) AS flagId
+                FROM flagMap LEFT JOIN flagMapChanges
+                ON flagMap.gmailId = flagMapChanges.gmailId
+                    AND (flagMap.flagId IN (flagMapChanges.oldFlagId, flagMapChanges.newFlagId))
+            UNION ALL
+                SELECT gmailId, newFlagId AS flagId
+                FROM flagMapChanges
+                WHERE oldFlagId IS NULL
+    SQL)
+
+    db.exec(<<-SQL
         CREATE TABLE IF NOT EXISTS addresses (
             addressId INTEGER PRIMARY KEY,
             email TEXT UNIQUE,

@@ -106,10 +106,12 @@ private class ThreadLister < Lister
         @db.query("SELECT count(*) FROM messages WHERE threadId = ?", thread_id) do |rs|
             num_messages = rs.read(Int32)
         end
-        @db.query("SELECT count(flagId) FROM flagMap
-                   WHERE gmailId IN (SELECT gmailId FROM messages WHERE threadId = ?)
-                   AND flagId =
-                     (SELECT flagId FROM flags WHERE name = '\\Seen')", thread_id) do |rs|
+        read_messages = 0
+        @db.query("SELECT count(gmailId) FROM messages
+                   WHERE threadId = ?
+                   AND EXISTS (SELECT * FROM flagMapFused
+                        WHERE gmailId = messages.gmailId AND flagId =
+                     (SELECT flagId FROM flags WHERE name = '\\Seen'))", thread_id) do |rs|
             read_messages = rs.read(Int32)
         end
 
@@ -130,7 +132,7 @@ private class MessageLister < Lister
         unseen = true
 
         @db.query("SELECT name FROM flags WHERE flagId IN
-                   (SELECT flagId FROM flagMap WHERE gmailId = ?)", gmail_id) do |rs|
+                   (SELECT flagId FROM flagMapFused WHERE gmailId = ?)", gmail_id) do |rs|
             case rs.read(String)
                 when "\\Seen"
                     unseen = false
